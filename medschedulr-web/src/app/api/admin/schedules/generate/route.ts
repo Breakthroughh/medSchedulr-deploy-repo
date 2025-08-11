@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 // Python API configuration
-const PYTHON_API_BASE = process.env.PYTHON_API_URL || 'http://localhost:8000'
+const PYTHON_API_BASE = process.env.PYTHON_API_BASE_URL || 'http://localhost:8000'
 
 export async function POST(request: NextRequest) {
   try {
@@ -139,19 +139,22 @@ export async function POST(request: NextRequest) {
     const result = await pythonResponse.json()
     
     // Create schedule generation record
-    const scheduleGeneration = await prisma.scheduleGeneration.create({
+    const scheduleGeneration = await prisma.schedule_generations.create({
       data: {
+        id: `sched_gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         rosterPeriodId,
         jobId: result.job_id,
         status: 'PENDING',
         requestedById: session.user.id,
-        solverConfigId: solverConfig.id
+        solverConfigId: solverConfig.id,
+        updatedAt: new Date()
       }
     })
 
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "CREATE",
         resource: "ScheduleGeneration",
