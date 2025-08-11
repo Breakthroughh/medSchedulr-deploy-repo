@@ -30,15 +30,15 @@ async function main() {
       create: {
         name: 'Emergency Department',
         active: true,
-        clinicDays: {
+        clinic_days: {
           create: [
-            { weekday: 0 }, // Monday
-            { weekday: 1 }, // Tuesday
-            { weekday: 2 }, // Wednesday
-            { weekday: 3 }, // Thursday
-            { weekday: 4 }, // Friday
-            { weekday: 5 }, // Saturday
-            { weekday: 6 }, // Sunday
+            { id: `clinic_ed_1`, weekday: 0 }, // Monday
+            { id: `clinic_ed_2`, weekday: 1 }, // Tuesday
+            { id: `clinic_ed_3`, weekday: 2 }, // Wednesday
+            { id: `clinic_ed_4`, weekday: 3 }, // Thursday
+            { id: `clinic_ed_5`, weekday: 4 }, // Friday
+            { id: `clinic_ed_6`, weekday: 5 }, // Saturday
+            { id: `clinic_ed_7`, weekday: 6 }, // Sunday
           ]
         }
       }
@@ -49,13 +49,13 @@ async function main() {
       create: {
         name: 'Internal Medicine',
         active: true,
-        clinicDays: {
+        clinic_days: {
           create: [
-            { weekday: 0 }, // Monday
-            { weekday: 1 }, // Tuesday
-            { weekday: 2 }, // Wednesday
-            { weekday: 3 }, // Thursday
-            { weekday: 4 }, // Friday
+            { id: `clinic_im_1`, weekday: 0 }, // Monday
+            { id: `clinic_im_2`, weekday: 1 }, // Tuesday
+            { id: `clinic_im_3`, weekday: 2 }, // Wednesday
+            { id: `clinic_im_4`, weekday: 3 }, // Thursday
+            { id: `clinic_im_5`, weekday: 4 }, // Friday
           ]
         }
       }
@@ -68,8 +68,9 @@ async function main() {
   const doctorPassword = await bcrypt.hash('doctor123', 12)
   
   const doctors = await Promise.all([
-    prisma.doctor.create({
+    prisma.doctors.create({
       data: {
+        id: `doctor_sarah_${Date.now()}`,
         displayName: 'Dr. Sarah Johnson',
         unitId: units[0].id,
         category: 'SENIOR',
@@ -77,7 +78,8 @@ async function main() {
         workloadWeekday: 0,
         workloadWeekend: 0,
         workloadED: 0,
-        user: {
+        updatedAt: new Date(),
+        users: {
           create: {
             email: 'sarah.johnson@hospital.com',
             password: doctorPassword,
@@ -87,8 +89,9 @@ async function main() {
         }
       }
     }),
-    prisma.doctor.create({
+    prisma.doctors.create({
       data: {
+        id: `doctor_michael_${Date.now()}`,
         displayName: 'Dr. Michael Chen',
         unitId: units[1].id,
         category: 'JUNIOR',
@@ -96,7 +99,8 @@ async function main() {
         workloadWeekday: 0,
         workloadWeekend: 0,
         workloadED: 0,
-        user: {
+        updatedAt: new Date(),
+        users: {
           create: {
             email: 'michael.chen@hospital.com',
             password: doctorPassword,
@@ -106,8 +110,9 @@ async function main() {
         }
       }
     }),
-    prisma.doctor.create({
+    prisma.doctors.create({
       data: {
+        id: `doctor_emily_${Date.now()}`,
         displayName: 'Dr. Emily Rodriguez',
         unitId: units[0].id,
         category: 'REGISTRAR',
@@ -115,7 +120,8 @@ async function main() {
         workloadWeekday: 0,
         workloadWeekend: 0,
         workloadED: 0,
-        user: {
+        updatedAt: new Date(),
+        users: {
           create: {
             email: 'emily.rodriguez@hospital.com',
             password: doctorPassword,
@@ -131,73 +137,81 @@ async function main() {
 
   // Create some post configurations
   const postConfigs = await Promise.all([
-    prisma.postConfig.upsert({
+    prisma.post_configs.upsert({
       where: { name: 'Weekday Shift' },
       update: {},
       create: {
+        id: 'post_weekday_shift',
         name: 'Weekday Shift',
         type: 'WEEKDAY',
         active: true
       }
     }),
-    prisma.postConfig.upsert({
+    prisma.post_configs.upsert({
       where: { name: 'Weekend Shift' },
       update: {},
       create: {
+        id: 'post_weekend_shift',
         name: 'Weekend Shift',
         type: 'WEEKEND', 
         active: true
       }
     }),
-    prisma.postConfig.upsert({
+    prisma.post_configs.upsert({
       where: { name: 'On-Call' },
       update: {},
       create: {
+        id: 'post_on_call',
         name: 'On-Call',
         type: 'BOTH',
         active: true
       }
     }),
-    prisma.postConfig.upsert({
+    prisma.post_configs.upsert({
       where: { name: 'Standby Oncall' },
       update: {},
       create: {
+        id: 'post_standby_oncall',
         name: 'Standby Oncall',
         type: 'WEEKEND',
         active: true
       }
     }),
-    prisma.postConfig.upsert({
+    prisma.post_configs.upsert({
       where: { name: 'ED1' },
       update: {},
       create: {
+        id: 'post_ed1',
         name: 'ED1',
         type: 'BOTH',
         active: true
       }
     }),
-    prisma.postConfig.upsert({
+    prisma.post_configs.upsert({
       where: { name: 'ED2' },
       update: {},
       create: {
+        id: 'post_ed2',
         name: 'ED2',
         type: 'BOTH',
         active: true
       }
     }),
-    prisma.postConfig.upsert({
+    prisma.post_configs.upsert({
       where: { name: 'Ward1' },
       update: {},
       create: {
+        id: 'post_ward1',
         name: 'Ward1',
         type: 'WEEKDAY',
         active: true
       }
     }),
-    prisma.postConfig.upsert({
+    prisma.post_configs.upsert({
       where: { name: 'Ward2' },
       update: {},
       create: {
+        id: 'post_ward2',
         name: 'Ward2',
         type: 'WEEKDAY',
         active: true
@@ -208,10 +222,11 @@ async function main() {
   console.log('✅ Post configs created:', postConfigs.map(p => p.name))
 
   // Create solver config
-  const solverConfig = await prisma.solverConfig.upsert({
+  const solverConfig = await prisma.solver_configs.upsert({
     where: { name: 'default' },
     update: {},
     create: {
+      id: 'solver_config_default',
       name: 'default',
       lambdaRest: 3,
       lambdaGap: 1,
@@ -226,7 +241,8 @@ async function main() {
       clinicPenaltyAfter: 5,
       bigM: 10000,
       solverTimeoutSeconds: 600,
-      active: true
+      active: true,
+      updatedAt: new Date()
     }
   })
   
@@ -261,6 +277,7 @@ async function main() {
     for (const doctor of doctors) {
       for (const postConfig of postConfigs) {
         availabilityRecords.push({
+          id: `avail_${doctor.id}_${postConfig.id}_${i}`,
           doctorId: doctor.id,
           rosterPeriodId: testPeriod.id,
           postConfigId: postConfig.id,
