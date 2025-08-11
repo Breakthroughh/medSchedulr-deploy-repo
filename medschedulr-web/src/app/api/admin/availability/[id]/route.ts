@@ -26,14 +26,14 @@ export async function PUT(
     }
 
     // Check if the availability request exists and is pending
-    const availabilityRequest = await prisma.availabilityRequest.findUnique({
+    const availabilityRequest = await prisma.availability_requests.findUnique({
       where: { id },
       include: {
-        doctor: {
+        doctors_availability_requests_doctorIdTodoctors: {
           select: {
             id: true,
             displayName: true,
-            unit: {
+            units: {
               select: {
                 name: true
               }
@@ -59,7 +59,7 @@ export async function PUT(
     }) : null
 
     // Update the availability request
-    const updatedRequest = await prisma.availabilityRequest.update({
+    const updatedRequest = await prisma.availability_requests.update({
       where: { id },
       data: {
         status: action === 'approve' ? 'APPROVED' : 'REJECTED',
@@ -72,13 +72,14 @@ export async function PUT(
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: action === 'approve' ? "APPROVE" : "REJECT",
         resource: "AvailabilityRequest",
         resourceId: id,
         details: {
-          doctorName: availabilityRequest.doctor.displayName,
-          doctorUnit: availabilityRequest.doctor.unit?.name,
+          doctorName: availabilityRequest.doctors_availability_requests_doctorIdTodoctors.displayName,
+          doctorUnit: availabilityRequest.doctors_availability_requests_doctorIdTodoctors.units?.name,
           startDate: availabilityRequest.startDate,
           endDate: availabilityRequest.endDate,
           type: availabilityRequest.type,
