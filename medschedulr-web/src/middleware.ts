@@ -1,13 +1,36 @@
-// Temporarily disabled middleware to debug 404 issues
-// All routes will be accessible without authentication
+import { withAuth } from "next-auth/middleware"
 
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-
-export function middleware(request: NextRequest) {
-  // Allow all requests through for debugging
-  return NextResponse.next()
-}
+export default withAuth(
+  function middleware(req) {
+    // Add any additional middleware logic here
+  },
+  {
+    callbacks: {
+      authorized: ({ token, req }) => {
+        const { pathname } = req.nextUrl
+        
+        // Allow access to auth pages and API routes
+        if (pathname.startsWith("/auth") || pathname.startsWith("/api/auth") || pathname === "/api/test-db") {
+          return true
+        }
+        
+        // Require authentication for all other pages
+        if (!token) return false
+        
+        // Check role-based access
+        if (pathname.startsWith("/admin")) {
+          return token.role === "ADMIN"
+        }
+        
+        if (pathname.startsWith("/doctor")) {
+          return token.role === "DOCTOR"
+        }
+        
+        return true
+      },
+    },
+  }
+)
 
 export const config = {
   matcher: [
