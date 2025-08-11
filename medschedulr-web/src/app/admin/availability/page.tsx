@@ -17,18 +17,16 @@ interface AvailabilityRequest {
   createdAt: string
   approvedAt?: string
   rejectionReason?: string
-  doctor: {
+  doctors_availability_requests_doctorIdTodoctors: {
     id: string
     displayName: string
     category: string
-    unit: {
+    units: {
       name: string
     }
   }
-  approvedBy?: {
-    doctor: {
-      displayName: string
-    }
+  doctors_availability_requests_approvedByIdTodoctors?: {
+    displayName: string
   }
   posts: Array<{
     postConfig: {
@@ -244,9 +242,9 @@ export default function AdminAvailabilityPage() {
                           <div className="flex items-center space-x-3 mb-4">
                             <User className="w-5 h-5 text-gray-400" />
                             <div>
-                              <p className="font-medium text-gray-900">{request.doctor.displayName}</p>
+                              <p className="font-medium text-gray-900">{request.doctors_availability_requests_doctorIdTodoctors.displayName}</p>
                               <p className="text-sm text-gray-500">
-                                {request.doctor.category} • {request.doctor.unit.name}
+                                {request.doctors_availability_requests_doctorIdTodoctors.category} • {request.doctors_availability_requests_doctorIdTodoctors.units.name}
                               </p>
                             </div>
                           </div>
@@ -295,7 +293,7 @@ export default function AdminAvailabilityPage() {
                             {request.approvedAt && (
                               <span className="ml-4">
                                 {request.status === 'APPROVED' ? 'Approved' : 'Rejected'}: {format(parseISO(request.approvedAt), 'MMM dd, yyyy HH:mm')}
-                                {request.approvedBy && ` by ${request.approvedBy.doctor.displayName}`}
+                                {request.doctors_availability_requests_approvedByIdTodoctors && ` by ${request.doctors_availability_requests_approvedByIdTodoctors.displayName}`}
                               </span>
                             )}
                           </div>
