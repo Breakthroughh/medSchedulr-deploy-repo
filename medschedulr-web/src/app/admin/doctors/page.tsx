@@ -23,11 +23,11 @@ interface Doctor {
   workloadWeekend: number
   workloadED: number
   lastStandby?: string
-  unit: {
+  units: {
     id: string
     name: string
   }
-  user?: {
+  users?: {
     id: string
     email: string
     active: boolean
@@ -430,7 +430,7 @@ export default function DoctorsPage() {
                               }`}>
                                 {doctor.category.toLowerCase()}
                               </span>
-                              {doctor.user ? (
+                              {doctor.users ? (
                                 <span className="flex items-center text-xs text-green-600">
                                   <UserCheck className="w-3 h-3 mr-1" />
                                   Has account
@@ -442,12 +442,12 @@ export default function DoctorsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
                               <div className="flex items-center">
                                 <Building className="w-4 h-4 mr-2" />
-                                {doctor.unit.name}
+                                {doctor.units?.name || 'No unit assigned'}
                               </div>
-                              {doctor.user && (
+                              {doctor.users && (
                                 <div className="flex items-center">
                                   <Mail className="w-4 h-4 mr-2" />
-                                  {doctor.user.email}
+                                  {doctor.users.email}
                                 </div>
                               )}
                               <div className="text-xs">
