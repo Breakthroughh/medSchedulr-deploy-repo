@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if unit exists
-    const unit = await prisma.unit.findUnique({
+    const unit = await prisma.units.findUnique({
       where: { id: unitId }
     })
 

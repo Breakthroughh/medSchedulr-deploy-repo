@@ -20,7 +20,7 @@ export async function PUT(
     // Check if doctor exists
     const existingDoctor = await prisma.doctors.findUnique({
       where: { id },
-      include: { unit: true }
+      include: { units: true }
     })
 
     if (!existingDoctor) {
@@ -34,7 +34,7 @@ export async function PUT(
 
     // Validate unit if provided
     if (unitId) {
-      const unit = await prisma.unit.findUnique({
+      const unit = await prisma.units.findUnique({
         where: { id: unitId }
       })
 
@@ -56,7 +56,7 @@ export async function PUT(
       where: { id },
       data: updateData,
       include: {
-        unit: {
+        units: {
           select: {
             id: true,
             name: true
@@ -68,6 +68,7 @@ export async function PUT(
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "UPDATE",
         resource: "Doctor",
@@ -75,12 +76,12 @@ export async function PUT(
         details: { 
           oldData: {
             displayName: existingDoctor.displayName,
-            unit: existingDoctor.unit.name,
+            unit: existingDoctor.units?.name,
             category: existingDoctor.category
           },
           newData: {
             displayName: doctor.displayName,
-            unit: doctor.unit.name,
+            unit: doctor.units?.name,
             category: doctor.category
           }
         }
@@ -111,8 +112,8 @@ export async function DELETE(
     const doctor = await prisma.doctors.findUnique({
       where: { id },
       include: {
-        user: true,
-        unit: true,
+        users: true,
+        units: true,
         availability: true,
         assignments: true
       }
@@ -132,14 +133,14 @@ export async function DELETE(
     // Delete in transaction to ensure consistency
     await prisma.$transaction(async (tx) => {
       // Delete user account if exists
-      if (doctor.user) {
+      if (doctor.users) {
         await tx.user.delete({
-          where: { id: doctor.user.id }
+          where: { id: doctor.users.id }
         })
       }
 
       // Delete doctor
-      await tx.doctor.delete({
+      await tx.doctors.delete({
         where: { id }
       })
     })
@@ -147,14 +148,15 @@ export async function DELETE(
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "DELETE",
         resource: "Doctor",
         resourceId: id,
         details: { 
           displayName: doctor.displayName,
-          email: doctor.user?.email,
-          unit: doctor.unit.name
+          email: doctor.users?.email,
+          unit: doctor.units?.name
         }
       }
     })
