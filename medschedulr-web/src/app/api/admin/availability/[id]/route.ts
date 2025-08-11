@@ -54,7 +54,7 @@ export async function PUT(
     }
 
     // Find the admin's doctor record (for audit purposes)
-    const adminDoctor = session.user.doctorId ? await prisma.doctor.findUnique({
+    const adminDoctor = session.user.doctorId ? await prisma.doctors.findUnique({
       where: { id: session.user.doctorId }
     }) : null
 
@@ -70,7 +70,7 @@ export async function PUT(
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
         userId: session.user.id,
         action: action === 'approve' ? "APPROVE" : "REJECT",

@@ -13,7 +13,7 @@ export async function GET() {
 
     const periods = await prisma.rosterPeriod.findMany({
       include: {
-        scheduleGenerations: {
+        schedule_generations: {
           where: {
             status: 'COMPLETED'
           },
@@ -29,7 +29,7 @@ export async function GET() {
         },
         _count: {
           select: {
-            scheduleGenerations: {
+            schedule_generations: {
               where: {
                 status: 'COMPLETED'
               }
@@ -108,8 +108,9 @@ export async function POST(request: NextRequest) {
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "CREATE",
         resource: "RosterPeriod",

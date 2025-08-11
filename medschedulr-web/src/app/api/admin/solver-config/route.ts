@@ -12,7 +12,7 @@ export async function GET() {
     }
 
     // Get the active solver configuration
-    const config = await prisma.solverConfig.findFirst({
+    const config = await prisma.solver_configs.findFirst({
       where: {
         active: true
       },
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Deactivate existing active configs
-    await prisma.solverConfig.updateMany({
+    await prisma.solver_configs.updateMany({
       where: {
         active: true
       },
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Create new configuration
-    const config = await prisma.solverConfig.create({
+    const config = await prisma.solver_configs.create({
       data: {
         name: name.trim(),
         lambdaRest,
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
         userId: session.user.id,
         action: "CREATE",

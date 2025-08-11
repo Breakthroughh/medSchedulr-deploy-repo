@@ -12,15 +12,15 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const doctors = await prisma.doctor.findMany({
+    const doctors = await prisma.doctors.findMany({
       include: {
-        unit: {
+        units: {
           select: {
             id: true,
             name: true
           }
         },
-        user: {
+        users: {
           select: {
             id: true,
             email: true,
@@ -80,14 +80,16 @@ export async function POST(request: NextRequest) {
     // Create doctor and user in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Create doctor first
-      const doctor = await tx.doctor.create({
+      const doctor = await tx.doctors.create({
         data: {
+          id: `doctor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           displayName: displayName.trim(),
           unitId,
           category,
           workloadWeekday: 0,
           workloadWeekend: 0,
-          workloadED: 0
+          workloadED: 0,
+          updatedAt: new Date()
         }
       })
 
@@ -108,8 +110,9 @@ export async function POST(request: NextRequest) {
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "CREATE",
         resource: "Doctor",

@@ -16,7 +16,7 @@ export async function GET() {
       return NextResponse.json({ error: "Doctor profile not found for user" }, { status: 404 })
     }
 
-    const doctor = await prisma.doctor.findUnique({
+    const doctor = await prisma.doctors.findUnique({
       where: { 
         id: session.user.doctorId
       }
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Doctor profile not found for user" }, { status: 404 })
     }
 
-    const doctor = await prisma.doctor.findUnique({
+    const doctor = await prisma.doctors.findUnique({
       where: { 
         id: session.user.doctorId
       }
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
 
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
         userId: session.user.id,
         action: "CREATE",

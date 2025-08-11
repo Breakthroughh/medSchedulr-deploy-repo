@@ -12,7 +12,7 @@ export async function POST() {
     }
 
     // Get current active config
-    const currentConfig = await prisma.solverConfig.findFirst({
+    const currentConfig = await prisma.solver_configs.findFirst({
       where: { active: true }
     })
 
@@ -21,7 +21,7 @@ export async function POST() {
     }
 
     // Reset to default values
-    const resetConfig = await prisma.solverConfig.update({
+    const resetConfig = await prisma.solver_configs.update({
       where: { id: currentConfig.id },
       data: {
         lambdaRest: 3,
@@ -42,7 +42,7 @@ export async function POST() {
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
         userId: session.user.id,
         action: "RESET",

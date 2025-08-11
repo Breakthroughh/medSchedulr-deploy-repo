@@ -12,27 +12,28 @@ export async function GET() {
     }
 
     // Get the active configuration (should only be one)
-    let config = await prisma.solverConfig.findFirst({
+    let config = await prisma.solver_configs.findFirst({
       where: { active: true },
       orderBy: { createdAt: 'desc' }
     })
 
     // If no active config exists, check for existing default config
     if (!config) {
-      const existingDefault = await prisma.solverConfig.findUnique({
+      const existingDefault = await prisma.solver_configs.findUnique({
         where: { name: "default" }
       })
       
       if (existingDefault) {
         // Activate the existing default config
-        config = await prisma.solverConfig.update({
+        config = await prisma.solver_configs.update({
           where: { id: existingDefault.id },
           data: { active: true }
         })
       } else {
         // Create new default config
-        config = await prisma.solverConfig.create({
+        config = await prisma.solver_configs.create({
           data: {
+            id: `solver_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name: "default",
             lambdaRest: 3,
             lambdaGap: 1,
@@ -47,7 +48,8 @@ export async function GET() {
             clinicPenaltyAfter: 5,
             bigM: 10000,
             solverTimeoutSeconds: 600,
-            active: true
+            active: true,
+            updatedAt: new Date()
           }
         })
       }
@@ -100,7 +102,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Get current active config
-    const currentConfig = await prisma.solverConfig.findFirst({
+    const currentConfig = await prisma.solver_configs.findFirst({
       where: { active: true }
     })
 
@@ -109,7 +111,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update the configuration
-    const updatedConfig = await prisma.solverConfig.update({
+    const updatedConfig = await prisma.solver_configs.update({
       where: { id: currentConfig.id },
       data: {
         lambdaRest: data.lambdaRest,
@@ -130,8 +132,9 @@ export async function PUT(request: NextRequest) {
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "UPDATE",
         resource: "SolverConfig",

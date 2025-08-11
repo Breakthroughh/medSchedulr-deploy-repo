@@ -18,7 +18,7 @@ export async function PUT(
     const { id } = await params
 
     // Check if doctor exists
-    const existingDoctor = await prisma.doctor.findUnique({
+    const existingDoctor = await prisma.doctors.findUnique({
       where: { id },
       include: { unit: true }
     })
@@ -52,7 +52,7 @@ export async function PUT(
     if (workloadED !== undefined) updateData.workloadED = parseInt(workloadED) || 0
     if (active !== undefined) updateData.active = Boolean(active)
 
-    const doctor = await prisma.doctor.update({
+    const doctor = await prisma.doctors.update({
       where: { id },
       data: updateData,
       include: {
@@ -66,7 +66,7 @@ export async function PUT(
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
         userId: session.user.id,
         action: "UPDATE",
@@ -108,7 +108,7 @@ export async function DELETE(
     const { id } = await params
 
     // Check if doctor exists
-    const doctor = await prisma.doctor.findUnique({
+    const doctor = await prisma.doctors.findUnique({
       where: { id },
       include: {
         user: true,
@@ -145,7 +145,7 @@ export async function DELETE(
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
         userId: session.user.id,
         action: "DELETE",

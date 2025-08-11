@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get all doctors with their units and availability
-    const doctors = await prisma.doctor.findMany({
+    const doctors = await prisma.doctors.findMany({
       include: {
         unit: true,
         availability: {
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     const postsWeekend = posts.filter(p => p.type === 'WEEKEND' || p.type === 'BOTH').map(p => p.name)
 
     // Get solver configuration
-    const solverConfig = await prisma.solverConfig.findFirst({
+    const solverConfig = await prisma.solver_configs.findFirst({
       where: { active: true },
       orderBy: { updatedAt: 'desc' }
     })
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Audit log
-    await prisma.auditLog.create({
+    await prisma.audit_logs.create({
       data: {
         userId: session.user.id,
         action: "CREATE",
