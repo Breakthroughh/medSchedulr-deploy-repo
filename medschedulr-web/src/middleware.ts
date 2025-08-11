@@ -10,7 +10,7 @@ export default withAuth(
         const { pathname } = req.nextUrl
         
         // Allow access to auth pages and API routes
-        if (pathname.startsWith("/auth") || pathname.startsWith("/api/auth") || pathname === "/api/test-db") {
+        if (pathname.startsWith("/auth") || pathname.startsWith("/api/auth") || pathname === "/api/test-db" || pathname === "/api/create-admin") {
           return true
         }
         
