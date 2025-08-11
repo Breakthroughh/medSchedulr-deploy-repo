@@ -1,7 +1,5 @@
 {
   "buildCommand": "cd medschedulr-web && npm run build",
   "outputDirectory": "medschedulr-web/.next",
-  "installCommand": "cd medschedulr-web && npm install",
-  "framework": "nextjs",
-  "rootDirectory": "medschedulr-web"
+  "installCommand": "cd medschedulr-web && npm install"
 } 
