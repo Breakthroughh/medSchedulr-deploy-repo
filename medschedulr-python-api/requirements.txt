@@ -1,0 +1,9 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+cvxpy[CBC]
+numpy
+pandas
+python-dateutil
+python-multipart
+typing-extensions
