@@ -31,7 +31,7 @@ export async function GET() {
         doctorId: doctor.id
       },
       include: {
-        approvedBy: {
+        doctors_availability_requests_approvedByIdTodoctors: {
           select: {
             displayName: true
           }

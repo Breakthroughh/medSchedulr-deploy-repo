@@ -22,8 +22,8 @@ export async function DELETE(
       include: {
         _count: {
           select: {
-            scheduleGenerations: true,
-            scheduleAssignments: true,
+            schedule_generations: true,
+            schedule_assignments: true,
             availability: true
           }
         }
@@ -35,7 +35,7 @@ export async function DELETE(
     }
 
     // Only allow deletion of DRAFT periods or periods with no generated schedules
-    if (period.status !== 'DRAFT' && period._count.scheduleGenerations > 0) {
+    if (period.status !== 'DRAFT' && period._count.schedule_generations > 0) {
       return NextResponse.json({ 
         error: "Cannot delete active periods with generated schedules" 
       }, { status: 400 })
@@ -44,12 +44,12 @@ export async function DELETE(
     // Delete related records first, then the roster period
     await prisma.$transaction(async (tx) => {
       // Delete schedule assignments first
-      await tx.scheduleAssignment.deleteMany({
+      await tx.schedule_assignments.deleteMany({
         where: { rosterPeriodId: id }
       })
 
       // Delete schedule generations
-      await tx.scheduleGeneration.deleteMany({
+      await tx.schedule_generations.deleteMany({
         where: { rosterPeriodId: id }
       })
 
@@ -67,6 +67,7 @@ export async function DELETE(
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "DELETE",
         resource: "RosterPeriod",
