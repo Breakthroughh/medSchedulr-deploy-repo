@@ -52,6 +52,7 @@ export async function PUT(
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "UPDATE",
         resource: "Unit",
@@ -112,6 +113,7 @@ export async function DELETE(
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "DELETE",
         resource: "Unit",

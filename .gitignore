@@ -10,7 +10,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/ - commented out to allow src/lib/ for Next.js
 lib64/
 parts/
 sdist/
