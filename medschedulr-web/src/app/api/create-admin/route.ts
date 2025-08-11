@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
     const admin = await prisma.user.create({
       data: {
         email: 'admin@medschedulr.com',
-        name: 'Admin User',
         password: hashedPassword,
         role: 'ADMIN'
       }
