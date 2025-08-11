@@ -24,7 +24,7 @@ export const authOptions: NextAuthOptions = {
             include: {
               doctors: {
                 include: {
-                  unit: true
+                  units: true
                 }
               }
             }

@@ -14,7 +14,7 @@ export async function GET() {
 
     const doctors = await prisma.doctors.findMany({
       include: {
-        unit: {
+        units: {
           select: {
             id: true,
             name: true

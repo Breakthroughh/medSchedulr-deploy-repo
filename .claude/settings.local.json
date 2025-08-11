@@ -5,7 +5,8 @@
       "Bash(npx prisma:*)",
       "Bash(node:*)",
       "Bash(source:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:Brownie$07@db.smzmxfkzqmnprigdcaur.supabase.co:5432/postgres\" npx prisma db pull)"
     ],
     "deny": []
   }
