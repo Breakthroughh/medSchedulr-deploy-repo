@@ -1,0 +1,192 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String          @unique
+  password      String?
+  role          Role            @default(DOCTOR)
+  image         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  doctorProfile DoctorProfile?
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verificationtokens")
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+}
+
+enum Category {
+  FLOATER
+  JUNIOR
+  SENIOR
+  REGISTRAR
+}
+
+model DoctorProfile {
+  id              String           @id @default(cuid())
+  userId          String           @unique
+  unitId          String?
+  category        Category         @default(JUNIOR)
+  lastStandby     DateTime?
+  workload        Json?            // Store workload as JSON
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unit            Unit?            @relation(fields: [unitId], references: [id])
+  availability    Availability[]
+  scheduleEntries ScheduleEntry[]
+
+  @@map("doctor_profiles")
+}
+
+model Unit {
+  id              String          @id @default(cuid())
+  name            String          @unique
+  clinicDays      Int[]           // Array of weekday numbers (0=Mon, 1=Tue, etc.)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  doctorProfiles  DoctorProfile[]
+
+  @@map("units")
+}
+
+model Post {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  isOncall        Boolean          @default(true)
+  isWeekendOnly   Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  availability    Availability[]
+  scheduleEntries ScheduleEntry[]
+
+  @@map("posts")
+}
+
+model RosterPeriod {
+  id              String           @id @default(cuid())
+  name            String
+  startDate       DateTime
+  endDate         DateTime
+  isActive        Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  availability    Availability[]
+  schedules       Schedule[]
+
+  @@map("roster_periods")
+}
+
+model Availability {
+  id              String         @id @default(cuid())
+  doctorId        String
+  postId          String
+  rosterPeriodId  String
+  date            DateTime
+  available       Boolean        @default(true)
+  reason          String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  doctor          DoctorProfile  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  post            Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  rosterPeriod    RosterPeriod   @relation(fields: [rosterPeriodId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, postId, rosterPeriodId, date])
+  @@map("availability")
+}
+
+model Schedule {
+  id              String           @id @default(cuid())
+  rosterPeriodId  String
+  generatedAt     DateTime         @default(now())
+  solverResults   Json?            // Store solver output as JSON
+  rosterPeriod    RosterPeriod     @relation(fields: [rosterPeriodId], references: [id], onDelete: Cascade)
+  entries         ScheduleEntry[]
+
+  @@map("schedules")
+}
+
+model ScheduleEntry {
+  id         String        @id @default(cuid())
+  scheduleId String
+  doctorId   String
+  postId     String
+  date       DateTime
+  createdAt  DateTime      @default(now())
+  schedule   Schedule      @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  doctor     DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  post       Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, doctorId, date])
+  @@unique([scheduleId, postId, date])
+  @@map("schedule_entries")
+}
+
+model SolverConfig {
+  id                    String   @id @default(cuid())
+  lambdaWorkload        Float    @default(1.0)
+  lambdaConsecutive     Float    @default(1.0)
+  lambdaWeekend         Float    @default(1.0)
+  lambdaLastStandby     Float    @default(1.0)
+  lambdaClinicConflict  Float    @default(10.0)
+  solverTimeLimit       Int      @default(300) // seconds
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("solver_config")
+}
