@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
       data: {
         id: `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: name.trim(),
-        type
+        type,
+        updatedAt: new Date()
       }
     })
 
