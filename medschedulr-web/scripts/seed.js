@@ -144,7 +144,8 @@ async function main() {
         id: 'post_weekday_shift',
         name: 'Weekday Shift',
         type: 'WEEKDAY',
-        active: true
+        active: true,
+        updatedAt: new Date()
       }
     }),
     prisma.post_configs.upsert({
@@ -154,7 +155,8 @@ async function main() {
         id: 'post_weekend_shift',
         name: 'Weekend Shift',
         type: 'WEEKEND', 
-        active: true
+        active: true,
+        updatedAt: new Date()
       }
     }),
     prisma.post_configs.upsert({
@@ -164,7 +166,8 @@ async function main() {
         id: 'post_on_call',
         name: 'On-Call',
         type: 'BOTH',
-        active: true
+        active: true,
+        updatedAt: new Date()
       }
     }),
     prisma.post_configs.upsert({
@@ -174,7 +177,8 @@ async function main() {
         id: 'post_standby_oncall',
         name: 'Standby Oncall',
         type: 'WEEKEND',
-        active: true
+        active: true,
+        updatedAt: new Date()
       }
     }),
     prisma.post_configs.upsert({
@@ -184,7 +188,8 @@ async function main() {
         id: 'post_ed1',
         name: 'ED1',
         type: 'BOTH',
-        active: true
+        active: true,
+        updatedAt: new Date()
       }
     }),
     prisma.post_configs.upsert({
@@ -194,7 +199,8 @@ async function main() {
         id: 'post_ed2',
         name: 'ED2',
         type: 'BOTH',
-        active: true
+        active: true,
+        updatedAt: new Date()
       }
     }),
     prisma.post_configs.upsert({
@@ -204,7 +210,8 @@ async function main() {
         id: 'post_ward1',
         name: 'Ward1',
         type: 'WEEKDAY',
-        active: true
+        active: true,
+        updatedAt: new Date()
       }
     }),
     prisma.post_configs.upsert({
@@ -214,7 +221,8 @@ async function main() {
         id: 'post_ward2',
         name: 'Ward2',
         type: 'WEEKDAY',
-        active: true
+        active: true,
+        updatedAt: new Date()
       }
     })
   ])
