@@ -30,7 +30,7 @@ export async function PUT(
     const unit = await prisma.unit.findUnique({
       where: { id },
       include: {
-        clinicDays: true
+        clinic_days: true
       }
     })
 
@@ -41,13 +41,13 @@ export async function PUT(
     // Update clinic days in a transaction
     await prisma.$transaction(async (tx) => {
       // Delete existing clinic days
-      await tx.clinicDay.deleteMany({
+      await tx.clinic_days.deleteMany({
         where: { unitId: id }
       })
 
       // Create new clinic days
       if (validWeekdays.length > 0) {
-        await tx.clinicDay.createMany({
+        await tx.clinic_days.createMany({
           data: validWeekdays.map(weekday => ({
             unitId: id,
             weekday
@@ -59,13 +59,14 @@ export async function PUT(
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "UPDATE",
         resource: "ClinicDays",
         resourceId: id,
         details: {
           unitName: unit.name,
-          oldClinicDays: unit.clinicDays.map(cd => cd.weekday),
+          oldClinicDays: unit.clinic_days.map(cd => cd.weekday),
           newClinicDays: validWeekdays
         }
       }

@@ -13,7 +13,7 @@ export async function GET() {
 
     const units = await prisma.unit.findMany({
       include: {
-        clinicDays: {
+        clinic_days: {
           orderBy: {
             weekday: 'asc'
           }
