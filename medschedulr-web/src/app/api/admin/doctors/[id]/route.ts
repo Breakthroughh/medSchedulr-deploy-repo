@@ -20,7 +20,7 @@ export async function PUT(
     // Check if doctor exists
     const existingDoctor = await prisma.doctors.findUnique({
       where: { id },
-      include: { units: true }
+      include: { unit: true }
     })
 
     if (!existingDoctor) {
@@ -34,7 +34,7 @@ export async function PUT(
 
     // Validate unit if provided
     if (unitId) {
-      const unit = await prisma.units.findUnique({
+      const unit = await prisma.unit.findUnique({
         where: { id: unitId }
       })
 
@@ -56,7 +56,7 @@ export async function PUT(
       where: { id },
       data: updateData,
       include: {
-        units: {
+        unit: {
           select: {
             id: true,
             name: true
@@ -76,12 +76,12 @@ export async function PUT(
         details: { 
           oldData: {
             displayName: existingDoctor.displayName,
-            unit: existingDoctor.units?.name,
+            unit: existingDoctor.unit?.name,
             category: existingDoctor.category
           },
           newData: {
             displayName: doctor.displayName,
-            unit: doctor.units?.name,
+            unit: doctor.unit?.name,
             category: doctor.category
           }
         }
@@ -113,7 +113,7 @@ export async function DELETE(
       where: { id },
       include: {
         users: true,
-        units: true,
+        unit: true,
         availability: true,
         assignments: true
       }
@@ -156,7 +156,7 @@ export async function DELETE(
         details: { 
           displayName: doctor.displayName,
           email: doctor.users?.email,
-          unit: doctor.units?.name
+          unit: doctor.unit?.name
         }
       }
     })

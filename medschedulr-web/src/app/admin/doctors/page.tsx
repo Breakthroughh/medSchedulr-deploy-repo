@@ -23,7 +23,7 @@ interface Doctor {
   workloadWeekend: number
   workloadED: number
   lastStandby?: string
-  units: {
+  unit: {
     id: string
     name: string
   }
@@ -442,7 +442,7 @@ export default function DoctorsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
                               <div className="flex items-center">
                                 <Building className="w-4 h-4 mr-2" />
-                                {doctor.units?.name || 'No unit assigned'}
+                                {doctor.unit?.name || 'No unit assigned'}
                               </div>
                               {doctor.users && (
                                 <div className="flex items-center">

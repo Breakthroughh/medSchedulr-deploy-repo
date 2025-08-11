@@ -14,7 +14,7 @@ export async function GET() {
 
     const doctors = await prisma.doctors.findMany({
       include: {
-        units: {
+        unit: {
           select: {
             id: true,
             name: true
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if unit exists
-    const unit = await prisma.units.findUnique({
+    const unit = await prisma.unit.findUnique({
       where: { id: unitId }
     })
 
