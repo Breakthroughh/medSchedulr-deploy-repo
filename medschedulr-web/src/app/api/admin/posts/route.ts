@@ -11,7 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const posts = await prisma.postConfig.findMany({
+    const posts = await prisma.post_configs.findMany({
       orderBy: {
         name: 'asc'
       }
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if post name already exists
-    const existingPost = await prisma.postConfig.findFirst({
+    const existingPost = await prisma.post_configs.findFirst({
       where: {
         name: name.trim()
       }
@@ -53,8 +53,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Post name already exists" }, { status: 400 })
     }
 
-    const post = await prisma.postConfig.create({
+    const post = await prisma.post_configs.create({
       data: {
+        id: `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: name.trim(),
         type
       }
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "CREATE",
         resource: "PostConfig",

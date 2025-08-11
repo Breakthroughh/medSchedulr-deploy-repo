@@ -49,6 +49,7 @@ export async function PUT(
       if (validWeekdays.length > 0) {
         await tx.clinic_days.createMany({
           data: validWeekdays.map(weekday => ({
+            id: `clinic_${id}_${weekday}_${Date.now()}`,
             unitId: id,
             weekday
           }))

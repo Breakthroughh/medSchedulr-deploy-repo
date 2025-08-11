@@ -17,7 +17,7 @@ export async function DELETE(
     const { id } = params
 
     // Check if post exists
-    const post = await prisma.postConfig.findUnique({
+    const post = await prisma.post_configs.findUnique({
       where: { id },
       include: {
         _count: {
@@ -40,13 +40,14 @@ export async function DELETE(
       }, { status: 400 })
     }
 
-    await prisma.postConfig.delete({
+    await prisma.post_configs.delete({
       where: { id }
     })
 
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "DELETE",
         resource: "PostConfig",
