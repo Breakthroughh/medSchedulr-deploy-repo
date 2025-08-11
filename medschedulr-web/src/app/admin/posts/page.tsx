@@ -11,7 +11,7 @@ import { Calendar, Settings, Plus, Edit, Trash2, Save } from "lucide-react"
 interface Unit {
   id: string
   name: string
-  clinicDays: Array<{ weekday: number }>
+  clinic_days: Array<{ weekday: number }>
 }
 
 interface PostConfig {
@@ -72,7 +72,7 @@ export default function PostsConfigPage() {
       const changes: {[unitId: string]: number[]} = {}
       const original: {[unitId: string]: number[]} = {}
       data.units?.forEach((unit: Unit) => {
-        const weekdays = unit.clinicDays.map(cd => cd.weekday)
+        const weekdays = unit.clinic_days.map(cd => cd.weekday)
         changes[unit.id] = weekdays
         original[unit.id] = weekdays
       })

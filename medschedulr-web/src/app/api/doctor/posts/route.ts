@@ -11,7 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const posts = await prisma.postConfig.findMany({
+    const posts = await prisma.post_configs.findMany({
       where: {
         active: true
       },

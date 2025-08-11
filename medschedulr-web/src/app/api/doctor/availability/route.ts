@@ -26,7 +26,7 @@ export async function GET() {
       return NextResponse.json({ error: "Doctor profile not found" }, { status: 404 })
     }
 
-    const requests = await prisma.availabilityRequest.findMany({
+    const requests = await prisma.availability_requests.findMany({
       where: {
         doctorId: doctor.id
       },
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for overlapping requests
-    const overlapping = await prisma.availabilityRequest.findFirst({
+    const overlapping = await prisma.availability_requests.findFirst({
       where: {
         doctorId: doctor.id,
         status: { in: ['PENDING', 'APPROVED'] },
@@ -115,8 +115,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the availability request
-    const availabilityRequest = await prisma.availabilityRequest.create({
+    const availabilityRequest = await prisma.availability_requests.create({
       data: {
+        id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         doctorId: doctor.id,
         startDate: start,
         endDate: end,
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "CREATE",
         resource: "AvailabilityRequest",
