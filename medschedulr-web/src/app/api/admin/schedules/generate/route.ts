@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     // Get all doctors with their units and availability
     const doctors = await prisma.doctors.findMany({
       include: {
-        unit: true,
+        units: true,
         availability: {
           where: {
             date: {
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
             }
           },
           include: {
-            postConfig: true
+            post_configs: true
           }
         }
       }
@@ -50,12 +50,12 @@ export async function POST(request: NextRequest) {
     // Get all units with clinic days
     const units = await prisma.unit.findMany({
       include: {
-        clinicDays: true
+        clinic_days: true
       }
     })
 
     // Get posts configuration
-    const posts = await prisma.postConfig.findMany({ where: { active: true } })
+    const posts = await prisma.post_configs.findMany({ where: { active: true } })
     const postsWeekday = posts.filter(p => p.type === 'WEEKDAY' || p.type === 'BOTH').map(p => p.name)
     const postsWeekend = posts.filter(p => p.type === 'WEEKEND' || p.type === 'BOTH').map(p => p.name)
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       doctors: doctors.map(doctor => ({
         id: doctor.id,
         name: doctor.displayName,
-        unit: doctor.unit.name,
+        unit: doctor.units.name,
         category: doctor.category.toLowerCase(),
         last_standby: doctor.lastStandby?.toISOString().split('T')[0] || null,
         workload: {
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       units: units.map(unit => ({
         id: unit.id,
         name: unit.name,
-        clinic_days: unit.clinicDays.map(cd => cd.weekday)
+        clinic_days: unit.clinic_days.map(cd => cd.weekday)
       })),
       posts_weekday: postsWeekday,
       posts_weekend: postsWeekend,
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         doctor.availability.map(avail => ({
           doctor_id: doctor.id,
           date: avail.date.toISOString().split('T')[0],
-          post: avail.postConfig.name,
+          post: avail.post_configs.name,
           available: avail.available
         }))
       ),

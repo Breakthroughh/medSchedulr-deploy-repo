@@ -32,10 +32,10 @@ export async function DELETE(
     }
 
     // Check if the request exists and belongs to this doctor
-    const availabilityRequest = await prisma.availabilityRequest.findUnique({
+    const availabilityRequest = await prisma.availability_requests.findUnique({
       where: { id },
       include: {
-        doctor: {
+        doctors_availability_requests_doctorIdTodoctors: {
           select: {
             displayName: true
           }
@@ -59,19 +59,20 @@ export async function DELETE(
     }
 
     // Delete the availability request (cascade will handle related records)
-    await prisma.availabilityRequest.delete({
+    await prisma.availability_requests.delete({
       where: { id }
     })
 
     // Audit log
     await prisma.audit_logs.create({
       data: {
+        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: session.user.id,
         action: "DELETE",
         resource: "AvailabilityRequest",
         resourceId: id,
         details: {
-          doctorName: availabilityRequest.doctor.displayName,
+          doctorName: availabilityRequest.doctors_availability_requests_doctorIdTodoctors.displayName,
           startDate: availabilityRequest.startDate,
           endDate: availabilityRequest.endDate,
           type: availabilityRequest.type,

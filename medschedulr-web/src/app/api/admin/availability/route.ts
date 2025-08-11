@@ -11,18 +11,18 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const requests = await prisma.availabilityRequest.findMany({
+    const requests = await prisma.availability_requests.findMany({
       include: {
-        doctor: {
+        doctors_availability_requests_doctorIdTodoctors: {
           include: {
-            unit: {
+            units: {
               select: {
                 name: true
               }
             }
           }
         },
-        approvedBy: {
+        doctors_availability_requests_approvedByIdTodoctors: {
           select: {
             displayName: true
           }
