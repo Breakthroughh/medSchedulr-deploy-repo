@@ -16,15 +16,15 @@ export async function GET(request: NextRequest) {
 
     if (rosterPeriodId) {
       // Get specific schedule for a roster period
-      const scheduleGeneration = await prisma.scheduleGeneration.findFirst({
+      const scheduleGeneration = await prisma.schedule_generations.findFirst({
         where: { 
           rosterPeriodId,
           status: 'COMPLETED'
         },
         orderBy: { completedAt: 'desc' },
         include: {
-          rosterPeriod: true,
-          requestedBy: {
+          roster_periods: true,
+          users: {
             select: { email: true }
           }
         }
@@ -35,17 +35,17 @@ export async function GET(request: NextRequest) {
       }
 
       // Get schedule assignments
-      const assignments = await prisma.scheduleAssignment.findMany({
+      const assignments = await prisma.schedule_assignments.findMany({
         where: { rosterPeriodId },
         include: {
-          doctor: {
-            include: { unit: true }
+          doctors: {
+            include: { units: true }
           }
         },
         orderBy: [
           { date: 'asc' },
           { postName: 'asc' },
-          { doctor: { displayName: 'asc' } }
+          { doctors: { displayName: 'asc' } }
         ]
       })
 
@@ -62,19 +62,19 @@ export async function GET(request: NextRequest) {
           date: assignment.date,
           postName: assignment.postName,
           doctor: {
-            id: assignment.doctor.id,
-            name: assignment.doctor.displayName,
-            unit: assignment.doctor.unit.name,
-            category: assignment.doctor.category
+            id: assignment.doctors.id,
+            name: assignment.doctors.displayName,
+            unit: assignment.doctors.units.name,
+            category: assignment.doctors.category
           }
         }))
       })
     } else {
       // Get all recent schedule generations
-      const scheduleGenerations = await prisma.scheduleGeneration.findMany({
+      const scheduleGenerations = await prisma.schedule_generations.findMany({
         include: {
-          rosterPeriod: true,
-          requestedBy: {
+          roster_periods: true,
+          users: {
             select: { email: true }
           }
         },
