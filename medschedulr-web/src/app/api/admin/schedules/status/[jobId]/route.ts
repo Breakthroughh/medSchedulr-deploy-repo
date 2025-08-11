@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-const PYTHON_API_BASE = process.env.PYTHON_API_URL || 'http://localhost:8000'
+const PYTHON_API_BASE = process.env.PYTHON_API_BASE_URL || 'http://localhost:8000'
 
 export async function GET(
   request: NextRequest,
@@ -19,11 +19,11 @@ export async function GET(
     const { jobId } = await params
 
     // Find the schedule generation record
-    const scheduleGeneration = await prisma.scheduleGeneration.findUnique({
+    const scheduleGeneration = await prisma.schedule_generations.findUnique({
       where: { jobId },
       include: {
-        rosterPeriod: true,
-        requestedBy: {
+        roster_periods: true,
+        users: {
           select: { email: true }
         }
       }
@@ -53,12 +53,13 @@ export async function GET(
         const schedule = pythonResult.result.schedule
         
         // Clear existing schedule for this roster period
-        await prisma.scheduleAssignment.deleteMany({
+        await prisma.schedule_assignments.deleteMany({
           where: { rosterPeriodId: scheduleGeneration.rosterPeriodId }
         })
         
         // Create new schedule assignments
         const assignments = schedule.map((assignment: any) => ({
+          id: `assign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           rosterPeriodId: scheduleGeneration.rosterPeriodId,
           doctorId: assignment.doctor,
           date: new Date(assignment.date),
@@ -66,7 +67,7 @@ export async function GET(
           scheduleGenerationId: scheduleGeneration.id
         }))
         
-        await prisma.scheduleAssignment.createMany({
+        await prisma.schedule_assignments.createMany({
           data: assignments
         })
         
@@ -74,7 +75,7 @@ export async function GET(
       }
       
       // Update schedule generation record
-      await prisma.scheduleGeneration.update({
+      await prisma.schedule_generations.update({
         where: { id: scheduleGeneration.id },
         data: {
           status: updatedStatus,
@@ -86,7 +87,7 @@ export async function GET(
     } else if (pythonResult.status === 'failed' && scheduleGeneration.status !== 'FAILED') {
       updatedStatus = 'FAILED'
       
-      await prisma.scheduleGeneration.update({
+      await prisma.schedule_generations.update({
         where: { id: scheduleGeneration.id },
         data: {
           status: updatedStatus,
@@ -102,12 +103,12 @@ export async function GET(
       status: updatedStatus,
       progress: pythonResult.progress || 0,
       rosterPeriod: {
-        id: scheduleGeneration.rosterPeriod.id,
-        name: scheduleGeneration.rosterPeriod.name,
-        startDate: scheduleGeneration.rosterPeriod.startDate,
-        endDate: scheduleGeneration.rosterPeriod.endDate
+        id: scheduleGeneration.roster_periods.id,
+        name: scheduleGeneration.roster_periods.name,
+        startDate: scheduleGeneration.roster_periods.startDate,
+        endDate: scheduleGeneration.roster_periods.endDate
       },
-      requestedBy: scheduleGeneration.requestedBy,
+      requestedBy: scheduleGeneration.users,
       createdAt: scheduleGeneration.createdAt,
       completedAt: scheduleGeneration.completedAt,
       result: pythonResult.result,
