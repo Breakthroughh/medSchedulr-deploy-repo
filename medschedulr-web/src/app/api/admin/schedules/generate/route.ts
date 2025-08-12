@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
         name: doctor.displayName,
         unit: doctor.units.name,
         category: doctor.category.toLowerCase(),
-        last_standby: doctor.lastStandby?.toISOString().split('T')[0] || null,
+        last_standby: doctor.lastStandby?.toISOString().split('T')[0] || "1900-01-01", // Default very old date if null
         workload: {
           weekday: doctor.workloadWeekday || 0,
           weekend: doctor.workloadWeekend || 0,
@@ -181,6 +181,13 @@ export async function POST(request: NextRequest) {
       category: d.category
     }))
     console.log('📋 Doctor Standby Info:', JSON.stringify(doctorStandbyInfo, null, 2))
+    
+    // Log Standby Oncall specific data for debugging
+    console.log('🎯 STANDBY ONCALL DEBUG:')
+    console.log(`  - Is "Standby Oncall" in posts_weekend? ${postsWeekend.includes('Standby Oncall')}`)
+    console.log(`  - Posts weekend array:`, postsWeekend)
+    console.log(`  - Standby availability count: ${standbyOncallAvailability.length}`)
+    console.log(`  - Weekend Standby availability count: ${weekendStandbyAvailability.length}`)
     
     console.log('📋 Schedule request data:', JSON.stringify(scheduleRequest, null, 2))
 

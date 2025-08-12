@@ -52,6 +52,23 @@ export async function GET(
       if (pythonResult.result && pythonResult.result.success) {
         const schedule = pythonResult.result.schedule
         
+        console.log('🐍 PYTHON API RESULT DEBUG:')
+        console.log(`  - Total assignments returned: ${schedule.length}`)
+        
+        // Count assignments by post
+        const postCounts = schedule.reduce((acc: any, assignment: any) => {
+          acc[assignment.post] = (acc[assignment.post] || 0) + 1
+          return acc
+        }, {})
+        console.log('  - Assignments by post:', JSON.stringify(postCounts, null, 2))
+        
+        // Check specifically for Standby Oncall
+        const standbyAssignments = schedule.filter((a: any) => a.post === 'Standby Oncall')
+        console.log(`  - Standby Oncall assignments from Python: ${standbyAssignments.length}`)
+        if (standbyAssignments.length > 0) {
+          console.log('  - Standby Oncall details:', JSON.stringify(standbyAssignments, null, 2))
+        }
+        
         // Clear existing schedule for this roster period
         await prisma.schedule_assignments.deleteMany({
           where: { rosterPeriodId: scheduleGeneration.rosterPeriodId }
@@ -112,6 +129,16 @@ export async function GET(
             }
           })
         }
+        
+        // Final logging before database save
+        const finalPostCounts = assignments.reduce((acc: any, assignment: any) => {
+          acc[assignment.postName] = (acc[assignment.postName] || 0) + 1
+          return acc
+        }, {})
+        console.log('💾 FINAL ASSIGNMENTS TO SAVE:', JSON.stringify(finalPostCounts, null, 2))
+        
+        const finalStandbyCount = assignments.filter(a => a.postName === 'Standby Oncall').length
+        console.log(`💾 Final Standby Oncall assignments to save: ${finalStandbyCount}`)
         
         await prisma.schedule_assignments.createMany({
           data: assignments
