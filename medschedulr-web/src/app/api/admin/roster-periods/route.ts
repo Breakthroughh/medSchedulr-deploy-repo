@@ -107,6 +107,51 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Generate ALL availability slots for this roster period (doctor × date × post = available: true)
+    const doctors = await prisma.doctors.findMany({
+      where: { active: true }
+    })
+
+    const posts = await prisma.post_configs.findMany({
+      where: { active: true }
+    })
+
+    // Generate date range
+    const dates = []
+    let currentDate = new Date(start)
+    const endDate = new Date(end)
+    
+    while (currentDate <= endDate) {
+      dates.push(new Date(currentDate))
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    console.log(`🔄 Creating availability matrix: ${doctors.length} doctors × ${dates.length} dates × ${posts.length} posts = ${doctors.length * dates.length * posts.length} slots`)
+
+    let slotsCreated = 0
+
+    // Create availability slots: ALL default to available: true
+    for (const doctor of doctors) {
+      for (const date of dates) {
+        for (const post of posts) {
+          await prisma.availability.create({
+            data: {
+              id: `avail_${period.id}_${doctor.id}_${post.id}_${date.getTime()}`,
+              doctorId: doctor.id,
+              rosterPeriodId: period.id,
+              postConfigId: post.id,
+              date: date,
+              available: true, // DEFAULT: All slots available
+              status: 'REQUESTED'
+            }
+          })
+          slotsCreated++
+        }
+      }
+    }
+
+    console.log(`✅ Created ${slotsCreated} availability slots for roster period: ${period.name}`)
+
     // Audit log
     await prisma.audit_logs.create({
       data: {

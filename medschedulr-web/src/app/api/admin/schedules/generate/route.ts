@@ -69,6 +69,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No active solver configuration found" }, { status: 404 })
     }
 
+    // Get approved unavailability requests for this period
+    const unavailabilityRequests = await prisma.availability_requests.findMany({
+      where: {
+        status: 'APPROVED',
+        startDate: { lte: rosterPeriod.endDate },
+        endDate: { gte: rosterPeriod.startDate }
+      }
+    })
+
+    // Prepare availability data with unavailability requests applied
+    const availabilityData = doctors.flatMap(doctor =>
+      doctor.availability.map(avail => {
+        const date = new Date(avail.date)
+        
+        // Check if doctor has approved unavailability request for this date/post
+        const hasUnavailabilityRequest = unavailabilityRequests.some(req => 
+          req.doctorId === doctor.id &&
+          date >= new Date(req.startDate) &&
+          date <= new Date(req.endDate) &&
+          (req.type === 'LEAVE' || 
+           req.type === 'UNAVAILABLE' || 
+           (req.type === 'BLOCK_ONCALL' && 
+            (avail.post_configs.name.toLowerCase().includes('call') || 
+             avail.post_configs.name.toLowerCase().includes('standby'))))
+        )
+
+        return {
+          doctor_id: doctor.id,
+          date: avail.date.toISOString().split('T')[0],
+          post: avail.post_configs.name,
+          available: avail.available && !hasUnavailabilityRequest // Apply unavailability requests
+        }
+      })
+    )
+
     // Prepare data for Python API
     const scheduleRequest = {
       roster_start: rosterPeriod.startDate.toISOString().split('T')[0],
@@ -92,14 +127,7 @@ export async function POST(request: NextRequest) {
       })),
       posts_weekday: postsWeekday,
       posts_weekend: postsWeekend,
-      availability: doctors.flatMap(doctor =>
-        doctor.availability.map(avail => ({
-          doctor_id: doctor.id,
-          date: avail.date.toISOString().split('T')[0],
-          post: avail.post_configs.name,
-          available: avail.available
-        }))
-      ),
+      availability: availabilityData,
       solver_config: {
         lambdaRest: solverConfig.lambdaRest,
         lambdaGap: solverConfig.lambdaGap,
