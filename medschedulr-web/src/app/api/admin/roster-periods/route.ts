@@ -127,22 +127,32 @@ export async function POST(request: NextRequest) {
       currentDate.setDate(currentDate.getDate() + 1)
     }
 
-    console.log(`🔄 Creating availability matrix: ${doctors.length} doctors × ${dates.length} dates × ${posts.length} posts = ${doctors.length * dates.length * posts.length} slots`)
+    console.log(`🔄 Creating availability matrix for ${doctors.length} doctors × ${dates.length} dates × ${posts.length} posts (respecting post type scheduling)`)
 
-    // Create availability slots: ALL default to available: true (batch create for performance)
+    // Create availability slots: DEFAULT to available: true, but respect post type scheduling
     const availabilitySlots = []
     for (const doctor of doctors) {
       for (const date of dates) {
+        const isWeekend = date.getDay() === 0 || date.getDay() === 6 // Sunday = 0, Saturday = 6
+        
         for (const post of posts) {
-          availabilitySlots.push({
-            id: `avail_${period.id}_${doctor.id}_${post.id}_${date.getTime()}`,
-            doctorId: doctor.id,
-            rosterPeriodId: period.id,
-            postConfigId: post.id,
-            date: date,
-            available: true, // DEFAULT: All slots available
-            status: 'REQUESTED'
-          })
+          // Only create availability slots for appropriate days based on post type
+          const shouldCreateSlot = 
+            post.type === 'BOTH' || // BOTH: create for all days
+            (post.type === 'WEEKDAY' && !isWeekend) || // WEEKDAY: only weekdays  
+            (post.type === 'WEEKEND' && isWeekend) // WEEKEND: only weekends
+          
+          if (shouldCreateSlot) {
+            availabilitySlots.push({
+              id: `avail_${period.id}_${doctor.id}_${post.id}_${date.getTime()}`,
+              doctorId: doctor.id,
+              rosterPeriodId: period.id,
+              postConfigId: post.id,
+              date: date,
+              available: true, // DEFAULT: All slots available
+              status: 'REQUESTED'
+            })
+          }
         }
       }
     }
