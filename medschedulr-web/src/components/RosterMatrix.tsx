@@ -65,6 +65,14 @@ const getPostType = (postName: string): string => {
   return 'other'
 }
 
+const formatPostName = (postName: string): string => {
+  if (postName.startsWith('clinic:')) {
+    const unitName = postName.split(':', 2)[1]
+    return `clinic ${unitName}`
+  }
+  return postName
+}
+
 export default function RosterMatrix({ 
   rosterPeriod, 
   assignments, 
@@ -175,19 +183,20 @@ export default function RosterMatrix({
     if (doctorAssignments.length > 0) {
       // Show assignments
       const postNames = doctorAssignments.map(a => a.postName)
+      const formattedNames = postNames.map(formatPostName)
       return {
         type: 'assignment',
-        display: postNames.length > 1 ? postNames.join(' • ') : postNames[0],
-        tooltip: postNames.join(', '),
+        display: formattedNames.length > 1 ? formattedNames.join(' • ') : formattedNames[0],
+        tooltip: formattedNames.join(', '),
         assignments: doctorAssignments,
         violations: cellViolations
       }
     } else if (doctor.clinicDays.includes(dayOfWeek)) {
-      // Show clinic day
+      // Show clinic day placeholder (actual assignments come from solver now)
       return {
-        type: 'clinic',
-        display: 'clinic',
-        tooltip: 'Clinic day',
+        type: 'clinic_placeholder',
+        display: 'clinic available',
+        tooltip: 'Available for clinic',
         assignments: [],
         violations: cellViolations
       }
@@ -465,7 +474,7 @@ export default function RosterMatrix({
                             `}
                             title={violationIndicator?.tooltip || cellContent.tooltip}
                             onClick={() => {
-                              if (editable && !isEditing && cellContent.type !== 'clinic') {
+                              if (editable && !isEditing && cellContent.type !== 'clinic_placeholder') {
                                 setEditingCell({ doctorId: doctor.id, dateStr })
                               }
                             }}
@@ -507,10 +516,10 @@ export default function RosterMatrix({
                               </div>
                             )}
                             
-                            {/* Clinic Content */}
-                            {cellContent.type === 'clinic' && !isEditing && (
-                              <div className={`px-1 py-0.5 rounded text-xs border ${POST_COLORS.clinic}`}>
-                                clinic
+                            {/* Clinic Placeholder Content */}
+                            {cellContent.type === 'clinic_placeholder' && !isEditing && (
+                              <div className="px-1 py-0.5 rounded text-xs border bg-blue-50 text-blue-600 border-blue-200 opacity-60">
+                                available
                               </div>
                             )}
 

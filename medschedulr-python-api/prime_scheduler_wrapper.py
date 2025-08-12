@@ -159,9 +159,32 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"Processing {len(doctors)} doctors across {len(clinic_days)} units")
         
         # Build posts_by_day mapping based on weekday/weekend of each date
+        # IMPORTANT: Filter clinic posts to only appear on their unit's clinic days
         posts_by_day = {}
         for idx, date in enumerate(date_list):
-            posts_by_day[idx] = posts_weekend if date.weekday() >= 5 else posts_weekday
+            if date.weekday() >= 5:  # Weekend
+                posts_by_day[idx] = posts_weekend
+            else:  # Weekday
+                day_posts = []
+                # Add non-clinic weekday posts
+                for post in posts_weekday:
+                    if not post.startswith("clinic:"):
+                        day_posts.append(post)
+                
+                # Add clinic posts only if this weekday is a clinic day for that unit
+                weekday = date.weekday()
+                for unit_name, clinic_weekdays in clinic_days.items():
+                    if weekday in clinic_weekdays:
+                        clinic_post = f"clinic:{unit_name}"
+                        if clinic_post not in day_posts:
+                            day_posts.append(clinic_post)
+                
+                posts_by_day[idx] = day_posts
+        
+        # Log posts_by_day for verification
+        sample_days = min(3, len(date_list))
+        for i in range(sample_days):
+            logger.info(f"Day {i} ({date_list[i]}): {posts_by_day[i]}")
         
         # Sets for CVXPY
         D = doctors
@@ -325,7 +348,15 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                         constraints.append(cp.sum(day_vars) <= 1)
             
             # === CLINIC ASSIGNMENT CONSTRAINTS ===
-            # Each unit must have exactly 1 doctor assigned to clinic on each clinic day
+            
+            # 1. Uniqueness constraint: Each doctor can do at most 1 clinic per day (across all units)
+            for d in D:
+                for s in S:
+                    clinic_vars = [x[d, s, t] for t in posts_by_day[s] if t.startswith("clinic:") and (d, s, t) in x]
+                    if clinic_vars:
+                        constraints.append(cp.sum(clinic_vars) <= 1)
+            
+            # 2. Coverage constraint: Each unit must have exactly 1 doctor assigned to clinic on each clinic day
             for u, weekdays in clinic_days.items():
                 clinic_post = f"clinic:{u}"
                 unit_docs = [d for d in D if doctor_info[d]["unit"] == u]
@@ -442,6 +473,7 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                                 constraints.append(cp.sum(oncall_today) + cp.sum(oncall_tomorrow) <= 1)
             
             # === CLINIC DAY PENALTIES ===
+            # Penalize oncall assignments before/same/after clinic days
             for d in D:
                 unit = doctor_info[d]["unit"]
                 days_for_unit = clinic_days.get(unit, [])
@@ -451,6 +483,7 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                             idx = s + delta
                             if 0 <= idx < len(date_list):
                                 for t in posts_by_day[idx]:
+                                    # Apply penalties to oncall posts (not clinic posts themselves)
                                     if t in oncall_posts and (d, idx, t) in x:
                                         if delta == -1:
                                             penalty_terms.append(lambda_before_clinic * x[d, idx, t])
@@ -458,6 +491,10 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                                             penalty_terms.append(lambda_same_clinic * x[d, idx, t])
                                         else:  # +1
                                             penalty_terms.append(lambda_after_clinic * x[d, idx, t])
+                                    # Also penalize doing clinic for other units on this doctor's clinic day
+                                    elif t.startswith("clinic:") and t != f"clinic:{unit}" and (d, idx, t) in x:
+                                        if delta == 0:  # Same day penalty for wrong unit clinic
+                                            penalty_terms.append(lambda_same_clinic * x[d, idx, t])
             
             # === WORKLOAD-BASED STANDBY ONCALL PENALTIES ===
             
@@ -605,14 +642,33 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                 for d, w, (sat_day, sun_day) in weekend_assignments:
                     logger.info(f"  Doctor {d} -> Weekend {w} ({date_list[sat_day]} to {date_list[sun_day]})")
             
-            # Extract assignments (NO special Standby Oncall handling - let post-processing handle it)
+            # Extract assignments with deduplication for clinic posts
+            assignment_map = {}  # (doctor, date) -> post
             for (d, s, t), var in final_x.items():
                 if var.value is not None and var.value > 0.5:  # Binary variable threshold
                     current_date = date_list[s]
+                    date_str = current_date.isoformat()
+                    
+                    if t.startswith("clinic:"):
+                        # For clinic posts, dedupe by (doctor, date) - only keep one clinic per doctor per day
+                        key = (d, date_str)
+                        if key not in assignment_map or not assignment_map[key].startswith("clinic:"):
+                            assignment_map[key] = t
+                    else:
+                        # For non-clinic posts, just add them
+                        results.append({
+                            "doctor": d,
+                            "date": date_str,
+                            "post": t
+                        })
+            
+            # Add deduplicated clinic assignments to results
+            for (doctor, date), post in assignment_map.items():
+                if post.startswith("clinic:"):
                     results.append({
-                        "doctor": d,
-                        "date": current_date.isoformat(),
-                        "post": t
+                        "doctor": doctor,
+                        "date": date,
+                        "post": post
                     })
             
             # Clinic assignments are now handled by the solver directly - no post-processing needed
