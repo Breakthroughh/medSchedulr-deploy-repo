@@ -121,6 +121,32 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                 "workload": doc['workload']
             }
         
+        # Extract enhanced workload data - ALWAYS provided now
+        workload_data = {}
+        if 'workload_data' in config and config['workload_data']:
+            for wd in config['workload_data']:
+                workload_data[wd['doctor_id']] = {
+                    "weekday_oncalls_3m": wd['weekday_oncalls_3m'],
+                    "weekend_oncalls_3m": wd['weekend_oncalls_3m'],
+                    "ed_shifts_3m": wd['ed_shifts_3m'],
+                    "days_since_last_standby": wd['days_since_last_standby'],
+                    "standby_count_12m": wd['standby_count_12m'],
+                    "standby_count_3m": wd['standby_count_3m']
+                }
+            logger.info(f"Enhanced workload data loaded for {len(workload_data)} doctors")
+        else:
+            # Ensure zero data for all doctors if no workload data provided
+            for d in doctors:
+                workload_data[d] = {
+                    "weekday_oncalls_3m": 0,
+                    "weekend_oncalls_3m": 0,
+                    "ed_shifts_3m": 0,
+                    "days_since_last_standby": 9999,
+                    "standby_count_12m": 0,
+                    "standby_count_3m": 0
+                }
+            logger.info(f"No workload data provided - using zeros for {len(workload_data)} doctors")
+        
         logger.info(f"Processing {len(doctors)} doctors across {len(clinic_days)} units")
         
         # Build posts_by_day mapping based on weekday/weekend of each date
@@ -153,16 +179,13 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                     if (d, s, t) not in availability:
                         availability[(d, s, t)] = False
         
-        # Ensure at least one doctor is available for each post on each day
-        # This prevents the solver from failing when no doctors are available
+        # REMOVED: No longer force D[0] availability - rely on Phase 2 relaxation instead
+        # Check for posts with no available doctors (will be handled by Phase 2 slack)
         for s in S:
             for t in posts_by_day[s]:
                 available_doctors = [d for d in D if availability.get((d, s, t), False)]
                 if not available_doctors:
-                    # If no doctors are available for this post on this day,
-                    # make the first doctor available to ensure the solver can assign someone
-                    logger.warning(f"No doctors available for {t} on day {s} ({date_list[s]}), making first doctor available")
-                    availability[(D[0], s, t)] = True
+                    logger.warning(f"⚠️  No doctors available for {t} on day {s} ({date_list[s]}) - will use Phase 2 relaxation")
         
         logger.info(f"Availability records: {len([k for k, v in availability.items() if v])}/{len(availability)} available")
         
@@ -191,8 +214,8 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
         if standby_weekend_available:
             logger.info(f"  Available doctors: {[f'{d} on {date}' for d, date in standby_weekend_available[:5]]}")
         
-        # Check Standby Oncall pairing feasibility
-        pairing_warnings, pairing_relaxed = check_standby_pairing_feasibility(availability, date_list, D)
+        # Log Standby Oncall weekend availability for the new constraint system
+        pairing_warnings = []  # Keep for compatibility
         
         # Extract solver configuration
         solver_config = config['solver_config']
@@ -211,14 +234,31 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
         solver_timeout = solver_config.get('solverTimeoutSeconds', 600)
         
         # --------------------------------------------------------------------------------
-        # Helper that builds & solves the model (adapted from original primeVersion2.py)
+        # Identify weekend pairs (Sat->Sun)
+        weekend_pairs = []
+        for s in range(len(date_list) - 1):
+            current_date = date_list[s]
+            next_date = date_list[s+1]
+            if current_date.weekday() == 5 and next_date.weekday() == 6:  # Sat->Sun
+                weekend_pairs.append((s, s+1))
+        
+        logger.info(f"🗓️  Found {len(weekend_pairs)} weekend pairs for Standby Oncall constraint")
+        for i, (sat_day, sun_day) in enumerate(weekend_pairs):
+            logger.info(f"   Weekend {i}: {date_list[sat_day]} -> {date_list[sun_day]}")
+        
+        # Helper that builds & solves the model
         def build_and_solve(RELAX: bool):
             # === Decision variables ===
             x = {(d, s, t): cp.Variable(boolean=True)
                  for d in D for s in S for t in posts_by_day[s]
                  if availability.get((d, s, t), False)}  # Only create vars where available
             
-            # === FIXED: Extended soft variables to include all adjacent pairs ===
+            # === STANDBY WEEKEND BINARY INDICATORS ===
+            # y[d, w] = 1 if doctor d is assigned Standby for weekend w (both Sat and Sun)
+            y = {(d, w): cp.Variable(boolean=True) 
+                 for d in D for w in range(len(weekend_pairs))}
+            
+            # === Soft constraint variables ===
             rest_violation = {(d, s): cp.Variable(boolean=True)
                               for d in D for s in range(len(date_list) - 1)}  # ALL adjacent pairs
             z_gap = {(d, s): cp.Variable(boolean=True)
@@ -226,10 +266,10 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
             min_one_slack = {d: cp.Variable(boolean=True)
                              for d in D if doctor_info[d]["category"] != "floater"}
             
-            # Standby pairing penalty variables
-            standby_mismatch_penalties = {}
+            # Multiple weekend penalty variables
+            multiple_weekend_penalty = {d: cp.Variable(nonneg=True) for d in D}
             
-            # Initialize penalty terms (will collect everything here)
+            # Initialize penalty terms
             penalty_terms = []
             
             # === CONSTRAINTS ===
@@ -262,110 +302,102 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                     if day_vars:
                         constraints.append(cp.sum(day_vars) <= 1)
             
-            # === IMPROVED STANDBY ONCALL PAIRING CONSTRAINTS ===
-            for s in range(len(date_list) - 1):
-                current_date = date_list[s]
-                next_date = date_list[s+1]
-                
-                if current_date.weekday() == 5 and next_date.weekday() == 6:  # Sat->Sun
-                    # Find doctors available on both days
-                    both_days_doctors = []
-                    for d in D:
-                        sat_available = availability.get((d, s, "Standby Oncall"), False)
-                        sun_available = availability.get((d, s+1, "Standby Oncall"), False)
-                        
-                        if sat_available and sun_available:
-                            both_days_doctors.append(d)
-                    
-                    standby_sat_vars = [x[d, s, "Standby Oncall"] for d in D if (d, s, "Standby Oncall") in x]
-                    standby_sun_vars = [x[d, s+1, "Standby Oncall"] for d in D if (d, s+1, "Standby Oncall") in x]
-                    
-                    if both_days_doctors and standby_sat_vars and standby_sun_vars:
-                        # Apply strict pairing for doctors available both days
-                        logger.info(f"Applying strict Standby pairing for weekend {current_date}: {len(both_days_doctors)} doctors available both days")
-                        for d in both_days_doctors:
-                            if (d, s, "Standby Oncall") in x and (d, s+1, "Standby Oncall") in x:
-                                constraints.append(x[d, s, "Standby Oncall"] == x[d, s+1, "Standby Oncall"])
-                    
-                    elif standby_sat_vars and standby_sun_vars:
-                        # Relax pairing with heavy penalty for different doctors
-                        logger.info(f"Relaxing Standby pairing for weekend {current_date}: no doctors available both days")
-                        
-                        mismatch_penalty = cp.Variable(boolean=True)
-                        standby_mismatch_penalties[(s, s+1)] = mismatch_penalty
-                        
-                        # Calculate total assignments for each day
-                        total_sat = cp.sum(standby_sat_vars) if standby_sat_vars else 0
-                        total_sun = cp.sum(standby_sun_vars) if standby_sun_vars else 0
-                        
-                        # Calculate matched assignments (same doctor both days)
-                        matched_assignments = cp.sum([
-                            x[d, s, "Standby Oncall"] * x[d, s+1, "Standby Oncall"] 
-                            for d in D 
-                            if (d, s, "Standby Oncall") in x and (d, s+1, "Standby Oncall") in x
-                        ]) if standby_sat_vars and standby_sun_vars else 0
-                        
-                        # Penalty if both days have assignments but different doctors
-                        # mismatch_penalty = 1 if (total_sat > 0 and total_sun > 0 and matched_assignments == 0)
-                        if isinstance(total_sat, (int, float)) and isinstance(total_sun, (int, float)):
-                            # Handle case where one or both totals are constants
-                            if total_sat > 0 and total_sun > 0:
-                                constraints.append(mismatch_penalty >= 1 - matched_assignments)
-                        else:
-                            # Both are variables
-                            sat_assigned = cp.Variable(boolean=True)
-                            sun_assigned = cp.Variable(boolean=True)
-                            constraints.append(sat_assigned >= total_sat)
-                            constraints.append(sun_assigned >= total_sun)
-                            constraints.append(mismatch_penalty >= sat_assigned + sun_assigned - 1 - matched_assignments)
-                        
-                        penalty_terms.append(STANDBY_MISMATCH_PENALTY_WEIGHT * mismatch_penalty)
+            # === LINEAR STANDBY ONCALL WEEKEND CONSTRAINTS ===
             
-            # === FIXED: REST CONSTRAINTS with soft penalties for Standby Oncall ===
+            # 1. Link weekend binary indicators to Saturday/Sunday assignments via AND linearization
+            for w, (sat_day, sun_day) in enumerate(weekend_pairs):
+                for d in D:
+                    if (d, w) in y:
+                        # Standard AND linearization: y[d,w] = 1 iff both Sat and Sun assignments = 1
+                        sat_var = x.get((d, sat_day, "Standby Oncall"), None)
+                        sun_var = x.get((d, sun_day, "Standby Oncall"), None)
+                        
+                        if sat_var is not None and sun_var is not None:
+                            # y[d,w] <= x[d,sat] and y[d,w] <= x[d,sun]  
+                            constraints.append(y[d, w] <= sat_var)
+                            constraints.append(y[d, w] <= sun_var)
+                            # y[d,w] >= x[d,sat] + x[d,sun] - 1
+                            constraints.append(y[d, w] >= sat_var + sun_var - 1)
+                        else:
+                            # If doctor not available for both days, y[d,w] = 0
+                            constraints.append(y[d, w] == 0)
+            
+            # 2. Enforce Saturday = Sunday pairing via two linear inequalities  
+            for w, (sat_day, sun_day) in enumerate(weekend_pairs):
+                sat_assignments = [x[d, sat_day, "Standby Oncall"] for d in D if (d, sat_day, "Standby Oncall") in x]
+                sun_assignments = [x[d, sun_day, "Standby Oncall"] for d in D if (d, sun_day, "Standby Oncall") in x]
+                
+                if sat_assignments and sun_assignments:
+                    # Same doctor must do both Saturday and Sunday
+                    for d in D:
+                        sat_var = x.get((d, sat_day, "Standby Oncall"), None)
+                        sun_var = x.get((d, sun_day, "Standby Oncall"), None)
+                        if sat_var is not None and sun_var is not None:
+                            constraints.append(sat_var == sun_var)  # Same doctor both days
+            
+            # 3. Cooldown constraint: y[d,w] + y[d,w+1] <= 1 (no consecutive weekends)
             for d in D:
-                for s in range(len(date_list) - 1):  # FIXED: All adjacent pairs
+                for w in range(len(weekend_pairs) - 1):
+                    if (d, w) in y and (d, w+1) in y:
+                        constraints.append(y[d, w] + y[d, w+1] <= 1)
+            
+            # 4. Monthly cap: at most 1 Standby weekend per doctor per period
+            for d in D:
+                weekend_vars = [y[d, w] for w in range(len(weekend_pairs)) if (d, w) in y]
+                if weekend_vars:
+                    constraints.append(cp.sum(weekend_vars) <= 1)
+            
+            # 5. Multiple weekend penalty: k[d] >= sum(y[d,w]) - 1
+            for d in D:
+                weekend_vars = [y[d, w] for w in range(len(weekend_pairs)) if (d, w) in y]
+                if weekend_vars and d in multiple_weekend_penalty:
+                    constraints.append(multiple_weekend_penalty[d] >= cp.sum(weekend_vars) - 1)
+                    penalty_terms.append(1000 * multiple_weekend_penalty[d])  # Penalty for 2nd+ weekend
+            
+            # === FIXED: REST CONSTRAINTS (corrected from >= 1 to <= 1 + slack) ===
+            for d in D:
+                for s in range(len(date_list) - 1):  # All adjacent pairs
                     oncall_today = [x[d, s, t] for t in posts_by_day[s] 
                                    if t in oncall_posts and (d, s, t) in x]
                     oncall_tomorrow = [x[d, s+1, t] for t in posts_by_day[s+1] 
                                       if t in oncall_posts and (d, s+1, t) in x]
                     
                     if oncall_today and oncall_tomorrow:
-                        # Check if this involves Standby Oncall on weekend
+                        # Check if this is a Standby weekend pair (already handled above)
                         is_standby_weekend = (
-                            date_list[s].weekday() >= 5 and 
+                            date_list[s].weekday() == 5 and date_list[s+1].weekday() == 6 and
                             any(t == "Standby Oncall" for t in posts_by_day[s]) and
                             any(t == "Standby Oncall" for t in posts_by_day[s+1])
                         )
                         
                         if is_standby_weekend:
-                            # FIXED: Soft constraint for Standby Oncall weekend pairs
-                            standby_today = [x[d, s, "Standby Oncall"]] if (d, s, "Standby Oncall") in x else []
-                            standby_tomorrow = [x[d, s+1, "Standby Oncall"]] if (d, s+1, "Standby Oncall") in x else []
+                            # Standby weekend rest is handled by the pairing constraint above
+                            # Only apply rest constraint to non-Standby posts
+                            non_standby_today = [x[d, s, t] for t in posts_by_day[s] 
+                                               if t in oncall_posts and t != "Standby Oncall" and (d, s, t) in x]
+                            non_standby_tomorrow = [x[d, s+1, t] for t in posts_by_day[s+1] 
+                                                  if t in oncall_posts and t != "Standby Oncall" and (d, s+1, t) in x]
                             
-                            if standby_today and standby_tomorrow and (d, s) in rest_violation:
-                                # Soft rest constraint: standby_today + standby_tomorrow <= 1 + violation
-                                constraints.append(
-                                    cp.sum(standby_today) + cp.sum(standby_tomorrow) <= 1 + rest_violation[d, s]
-                                )
-                                penalty_terms.append(STANDBY_REST_PENALTY_WEIGHT * rest_violation[d, s])
-                            
-                            # Other oncall posts still have hard constraint
-                            other_today = [x[d, s, t] for t in posts_by_day[s] 
-                                          if t in oncall_posts and t != "Standby Oncall" and (d, s, t) in x]
-                            other_tomorrow = [x[d, s+1, t] for t in posts_by_day[s+1] 
-                                             if t in oncall_posts and t != "Standby Oncall" and (d, s+1, t) in x]
-                            
-                            if other_today and other_tomorrow:
-                                constraints.append(cp.sum(other_today) + cp.sum(other_tomorrow) <= 1)
+                            if non_standby_today and non_standby_tomorrow:
+                                if (d, s) in rest_violation:
+                                    # FIXED: Soft constraint sum(today) + sum(tomorrow) <= 1 + violation
+                                    constraints.append(
+                                        cp.sum(non_standby_today) + cp.sum(non_standby_tomorrow) <= 1 + rest_violation[d, s]
+                                    )
+                                    penalty_terms.append(lambda_rest * rest_violation[d, s])
+                                else:
+                                    # Hard constraint 
+                                    constraints.append(cp.sum(non_standby_today) + cp.sum(non_standby_tomorrow) <= 1)
                         else:
-                            # Regular rest constraint for non-Standby posts
+                            # Regular rest constraint for all non-weekend-Standby adjacent pairs
                             if (d, s) in rest_violation:
+                                # FIXED: Corrected constraint sum(today) + sum(tomorrow) <= 1 + violation
                                 constraints.append(
-                                    cp.sum(oncall_today) + cp.sum(oncall_tomorrow) + rest_violation[d, s] >= 1
+                                    cp.sum(oncall_today) + cp.sum(oncall_tomorrow) <= 1 + rest_violation[d, s]
                                 )
                                 penalty_terms.append(lambda_rest * rest_violation[d, s])
                             else:
-                                # Hard constraint if no rest violation var
+                                # Hard constraint
                                 constraints.append(cp.sum(oncall_today) + cp.sum(oncall_tomorrow) <= 1)
             
             # === CLINIC DAY PENALTIES ===
@@ -386,13 +418,52 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                                         else:  # +1
                                             penalty_terms.append(lambda_after_clinic * x[d, idx, t])
             
+            # === WORKLOAD-BASED STANDBY ONCALL PENALTIES ===
+            
+            # Apply penalties based on historical workload and recency 
+            for d in D:
+                wd = workload_data.get(d, {
+                    "standby_count_12m": 0,
+                    "standby_count_3m": 0,
+                    "days_since_last_standby": 9999
+                })
+                
+                # Calculate penalty multiplier based on workload history
+                penalty_multiplier = lambda_standby  # Base penalty
+                
+                # HEAVY penalty if doctor has done Standby in last 12 months
+                if wd['standby_count_12m'] > 0:
+                    penalty_multiplier += 5000  # Make it very unlikely
+                    logger.debug(f"Heavy penalty for {d}: {wd['standby_count_12m']} standby in 12m")
+                
+                # Medium penalty for recent standby (3 months)
+                elif wd['standby_count_3m'] > 0:
+                    penalty_multiplier += 2000
+                
+                # Penalty based on recency (more recent = higher penalty)
+                elif wd['days_since_last_standby'] < 365:
+                    recency_penalty = max(0, (365 - wd['days_since_last_standby']) * 5)
+                    penalty_multiplier += recency_penalty
+                
+                # Reward doctors who haven't done standby in a long time
+                elif wd['days_since_last_standby'] > 365:
+                    reward = min(200, (wd['days_since_last_standby'] - 365) / 5)
+                    penalty_multiplier = max(1, penalty_multiplier - reward)  # Don't go negative
+                
+                # Apply penalty to all Standby assignments for this doctor
+                standby_vars = [x[d, s, t] for s in S for t in posts_by_day[s] 
+                               if t == "Standby Oncall" and (d, s, t) in x]
+                for var in standby_vars:
+                    penalty_terms.append(penalty_multiplier * var)
+            
             # === OTHER PENALTIES ===
             
             # Registrar weekend penalty
             for (d, s, t) in x.keys():
                 if (doctor_info[d]["category"] == "registrar" 
                     and date_list[s].weekday() >= 5 
-                    and t in oncall_posts):
+                    and t in oncall_posts
+                    and t != "Standby Oncall"):  # Don't double-penalize standby
                     penalty_terms.append(lambda_reg_weekend * x[d, s, t])
             
             # Junior ward penalty
@@ -462,32 +533,36 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
             if problem.value is not None:
                 logger.info(f"Objective value: {problem.value}")
             
-            return problem, x, standby_mismatch_penalties
+            return problem, x, y  # Return weekend binary indicators instead of mismatch penalties
         
         # --------------------------------------------------------------------------------
         # RUN PHASE 1 (strict constraints)
         logger.info("Starting Phase 1...")
-        problem1, x1, mismatch1 = build_and_solve(RELAX=False)
+        problem1, x1, y1 = build_and_solve(RELAX=False)
         
         if problem1.status == cp.OPTIMAL:
             logger.info("Phase 1 succeeded - using optimal solution")
-            final_problem, final_x, final_mismatch = problem1, x1, mismatch1
+            final_problem, final_x, final_y = problem1, x1, y1
         else:
             logger.info("Phase 1 failed - running Phase 2...")
-            problem2, x2, mismatch2 = build_and_solve(RELAX=True)
-            final_problem, final_x, final_mismatch = problem2, x2, mismatch2
+            problem2, x2, y2 = build_and_solve(RELAX=True)
+            final_problem, final_x, final_y = problem2, x2, y2
         
         # === EXTRACT RESULTS ===
         results = []
-        actual_pairing_relaxed = pairing_relaxed  # Start with pre-solve assessment
         
         if final_problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
-            # Check if any mismatch penalties were activated
-            for penalty_var in final_mismatch.values():
-                if penalty_var.value is not None and penalty_var.value > 0.5:
-                    actual_pairing_relaxed = True
-                    logger.warning("🔄 Standby Oncall pairing was relaxed due to solver constraints")
-                    break
+            # Log weekend binary indicator results
+            weekend_assignments = []
+            for d in D:
+                for w in range(len(weekend_pairs)):
+                    if (d, w) in final_y and final_y[d, w].value is not None and final_y[d, w].value > 0.5:
+                        weekend_assignments.append((d, w, weekend_pairs[w]))
+            
+            if weekend_assignments:
+                logger.info(f"Weekend Standby assignments: {len(weekend_assignments)}")
+                for d, w, (sat_day, sun_day) in weekend_assignments:
+                    logger.info(f"  Doctor {d} -> Weekend {w} ({date_list[sat_day]} to {date_list[sun_day]})")
             
             # Extract assignments (NO special Standby Oncall handling - let post-processing handle it)
             for (d, s, t), var in final_x.items():
@@ -519,7 +594,23 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
             for assignment in standby_assignments:
                 date_obj = datetime.datetime.strptime(assignment["date"], '%Y-%m-%d').date()
                 weekday_name = date_obj.strftime('%A')
-                logger.info(f"  {assignment['doctor']} -> {assignment['date']} ({weekday_name})")
+                doctor_id = assignment['doctor']
+                
+                # Log workload context for assigned doctor
+                workload_context = ""
+                if doctor_id in workload_data:
+                    wd = workload_data[doctor_id]
+                    workload_context = f" (12m_standby: {wd['standby_count_12m']}, days_since: {wd['days_since_last_standby']})"
+                
+                logger.info(f"  {assignment['doctor']} -> {assignment['date']} ({weekday_name}){workload_context}")
+            
+            # Log doctors who were eligible but not assigned
+            if workload_data:
+                eligible_doctors = [d for d in D if workload_data.get(d, {}).get('standby_count_12m', 0) == 0]
+                assigned_doctors = [a['doctor'] for a in standby_assignments]
+                not_assigned = [d for d in eligible_doctors if d not in assigned_doctors]
+                if not_assigned:
+                    logger.info(f"Eligible doctors not assigned Standby: {not_assigned[:5]}")  # Show first 5
                 
         else:
             logger.warning(f"Solver failed with status: {final_problem.status}")
@@ -557,8 +648,6 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
         
         # Prepare final warnings
         final_warnings = pairing_warnings.copy()
-        if actual_pairing_relaxed:
-            final_warnings.append("pairing-relaxed")
         
         return {
             "schedule": results,
@@ -567,7 +656,8 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
             "objective_value": final_problem.value if final_problem.value is not None else None,
             "success": final_problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE],
             "warnings": final_warnings,
-            "pairing_relaxed": actual_pairing_relaxed
+            "weekend_assignments": len([d for d in D for w in range(len(weekend_pairs)) 
+                                       if (d, w) in final_y and final_y[d, w].value is not None and final_y[d, w].value > 0.5]) if final_problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE] else 0
         }
         
     except Exception as e:
@@ -580,7 +670,7 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
             "success": False,
             "error": str(e),
             "warnings": [],
-            "pairing_relaxed": False
+            "weekend_assignments": 0
         }
 
 if __name__ == "__main__":

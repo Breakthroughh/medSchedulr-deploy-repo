@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { ClipboardList, Calendar, User, Clock } from "lucide-react"
+import WorkloadDisplay from "@/components/WorkloadDisplay"
 
 export default function DoctorDashboard() {
   const { data: session, status } = useSession()
@@ -86,9 +87,17 @@ export default function DoctorDashboard() {
           </div>
         </div>
 
+        <div className="mt-8">
+          <WorkloadDisplay 
+            doctorId={session.user.doctorId}
+            doctorName={session.user.doctor?.displayName}
+            showRefreshButton={false}
+          />
+        </div>
+
         <div className="mt-8 bg-white shadow rounded-lg">
           <div className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Info</h2>
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Legacy Workload (Database Values)</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="text-center p-4 bg-gray-50 rounded">
                 <div className="text-2xl font-bold text-gray-900">

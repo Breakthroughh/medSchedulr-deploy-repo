@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
       posts_weekday: postsWeekday,
       posts_weekend: postsWeekend,
       availability: availabilityData,
-      workload_data: workloadData, // Enhanced workload information
+      workload_data: workloadData, // ALWAYS provide enhanced workload information
       solver_config: {
         lambdaRest: solverConfig.lambdaRest,
         lambdaGap: solverConfig.lambdaGap,

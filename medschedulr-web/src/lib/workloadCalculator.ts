@@ -170,18 +170,30 @@ export async function updateDoctorWorkloadFields(workloadSummaries: WorkloadSumm
 }
 
 /**
- * Get workload data formatted for Python API
+ * Get workload data formatted for Python API - ALWAYS provide data for every doctor
  */
 export async function getWorkloadForPythonAPI(workloadSummaries: WorkloadSummary[]) {
-  return workloadSummaries.map(workload => ({
-    doctor_id: workload.doctorId,
-    weekday_oncalls_3m: workload.weekdayOncalls,
-    weekend_oncalls_3m: workload.weekendOncalls,
-    ed_shifts_3m: workload.edShifts,
-    days_since_last_standby: workload.daysSinceLastStandby,
-    standby_count_12m: workload.standbyCount12Months,
-    standby_count_3m: workload.standbyCount3Months
-  }))
+  // Ensure we always provide workload data for every doctor, even if zero
+  const workloadMap = new Map(workloadSummaries.map(w => [w.doctorId, w]))
+  
+  // Get all active doctors to ensure complete coverage
+  const allDoctors = await prisma.doctors.findMany({
+    where: { active: true },
+    select: { id: true }
+  })
+  
+  return allDoctors.map(doctor => {
+    const workload = workloadMap.get(doctor.id)
+    return {
+      doctor_id: doctor.id,
+      weekday_oncalls_3m: workload?.weekdayOncalls || 0,
+      weekend_oncalls_3m: workload?.weekendOncalls || 0,
+      ed_shifts_3m: workload?.edShifts || 0,
+      days_since_last_standby: workload?.daysSinceLastStandby || 9999,
+      standby_count_12m: workload?.standbyCount12Months || 0,
+      standby_count_3m: workload?.standbyCount3Months || 0
+    }
+  })
 }
 
 /**

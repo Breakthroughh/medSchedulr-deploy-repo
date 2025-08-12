@@ -5,8 +5,9 @@ import { useSession } from "next-auth/react"
 import { redirect } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit, Trash2, User, Mail, Building, UserCheck } from "lucide-react"
+import { Plus, Edit, Trash2, User, Mail, Building, UserCheck, TrendingUp } from "lucide-react"
 import { Select } from "@/components/ui/select"
+import WorkloadDisplay from "@/components/WorkloadDisplay"
 
 interface Unit {
   id: string
@@ -55,6 +56,7 @@ export default function DoctorsPage() {
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null)
+  const [viewingWorkload, setViewingWorkload] = useState<Doctor | null>(null)
   const [createData, setCreateData] = useState<CreateDoctorData>({
     displayName: '',
     email: '',
@@ -406,7 +408,26 @@ export default function DoctorsPage() {
               </div>
             )}
 
-            {!showCreateForm && !editingDoctor && (
+            {viewingWorkload && (
+              <div className="border rounded-lg p-6 mb-6 bg-blue-50">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Workload Details: {viewingWorkload.displayName}</h3>
+                  <Button
+                    variant="outline"
+                    onClick={() => setViewingWorkload(null)}
+                  >
+                    Close
+                  </Button>
+                </div>
+                <WorkloadDisplay 
+                  doctorId={viewingWorkload.id}
+                  doctorName={viewingWorkload.displayName}
+                  showRefreshButton={true}
+                />
+              </div>
+            )}
+
+            {!showCreateForm && !editingDoctor && !viewingWorkload && (
               <>
                 {doctors.length === 0 ? (
                   <div className="text-center py-8">
@@ -457,6 +478,15 @@ export default function DoctorsPage() {
                           </div>
 
                           <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setViewingWorkload(doctor)}
+                              className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <TrendingUp className="w-4 h-4" />
+                              <span>Workload</span>
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
