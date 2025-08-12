@@ -61,7 +61,7 @@ export default function ScheduleViewPage() {
   
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<'calendar' | 'list' | 'matrix'>('matrix')
+  const [view, setView] = useState<'list' | 'matrix'>('matrix')
 
   if (status === "loading") return <div>Loading...</div>
   if (!session || session.user.role !== "ADMIN") redirect("/auth/login")
@@ -252,14 +252,6 @@ export default function ScheduleViewPage() {
                 Matrix View
               </Button>
               <Button
-                variant={view === 'calendar' ? 'default' : 'outline'}
-                onClick={() => setView('calendar')}
-                size="sm"
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                Calendar View
-              </Button>
-              <Button
                 variant={view === 'list' ? 'default' : 'outline'}
                 onClick={() => setView('list')}
                 size="sm"
@@ -278,45 +270,14 @@ export default function ScheduleViewPage() {
                 assignments={assignments}
                 doctors={doctors}
                 units={units}
+                editable={true}
+                onAssignmentUpdate={(updatedAssignments) => {
+                  setScheduleData(prev => prev ? {
+                    ...prev,
+                    assignments: updatedAssignments
+                  } : null)
+                }}
               />
-            ) : view === 'calendar' ? (
-              /* Calendar View */
-              <div className="space-y-6">
-                {dateRange.map(date => {
-                  const dateStr = format(date, 'yyyy-MM-dd')
-                  const dayAssignments = assignmentsByDate[dateStr] || []
-                  
-                  return (
-                    <div key={dateStr} className="border rounded-lg">
-                      <div className="bg-gray-50 px-4 py-3 border-b">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-medium text-gray-900">
-                            {format(date, 'EEEE, MMM dd, yyyy')}
-                          </h3>
-                          <span className="text-sm text-gray-500">
-                            {dayAssignments.length} assignments
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        {dayAssignments.length === 0 ? (
-                          <p className="text-gray-500 text-sm">No assignments</p>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {dayAssignments.map(assignment => (
-                              <div key={assignment.id} className="bg-blue-50 rounded-lg p-3 border">
-                                <div className="font-medium text-blue-900">{assignment.postName}</div>
-                                <div className="text-sm text-blue-700">{assignment.doctor.name}</div>
-                                <div className="text-xs text-blue-600">{assignment.doctor.unit} • {assignment.doctor.category}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
             ) : (
               /* Doctor View */
               <div className="space-y-4">

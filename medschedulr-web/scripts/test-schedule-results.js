@@ -38,12 +38,12 @@ async function main() {
   }
 
   // Get all schedule assignments for this period
-  const assignments = await prisma.scheduleAssignment.findMany({
+  const assignments = await prisma.schedule_assignments.findMany({
     where: {
       rosterPeriodId: rosterPeriod.id
     },
     include: {
-      doctor: true
+      doctors: true
     },
     orderBy: [
       { date: 'asc' },
@@ -71,7 +71,7 @@ async function main() {
     // Track Standby Oncall weekend patterns
     if (post === 'Standby Oncall' && (weekday === 6 || weekday === 0)) { // Sat or Sun
       standbyWeekendPairs.push({
-        doctor: assignment.doctor.displayName,
+        doctor: assignment.doctors.displayName,
         date: date,
         weekday: weekday === 6 ? 'Saturday' : 'Sunday'
       })

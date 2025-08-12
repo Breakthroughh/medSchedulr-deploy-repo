@@ -1,11 +1,12 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useCallback } from "react"
 import { format, parseISO, isWeekend, isToday, getDay } from "date-fns"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
-import { Search, Filter } from "lucide-react"
+import { Search, Filter, Edit, Save, X, AlertTriangle, CheckCircle } from "lucide-react"
+import { checkViolations, type Violation } from "@/lib/violationChecker"
 
 interface Doctor {
   id: string
@@ -33,6 +34,8 @@ interface RosterMatrixProps {
   assignments: Assignment[]
   doctors: Doctor[]
   units: Array<{ id: string; name: string }>
+  editable?: boolean
+  onAssignmentUpdate?: (updatedAssignments: Assignment[]) => void
 }
 
 // Post type color mapping
@@ -62,10 +65,21 @@ const getPostType = (postName: string): string => {
   return 'other'
 }
 
-export default function RosterMatrix({ rosterPeriod, assignments, doctors, units }: RosterMatrixProps) {
+export default function RosterMatrix({ 
+  rosterPeriod, 
+  assignments, 
+  doctors, 
+  units, 
+  editable = false, 
+  onAssignmentUpdate 
+}: RosterMatrixProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedUnits, setSelectedUnits] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
+  const [showViolations, setShowViolations] = useState(true)
+  const [editingCell, setEditingCell] = useState<{ doctorId: string; dateStr: string } | null>(null)
+  const [localAssignments, setLocalAssignments] = useState(assignments)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Generate date range
   const dateRange = useMemo(() => {
@@ -81,11 +95,21 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
     return dates
   }, [rosterPeriod.startDate, rosterPeriod.endDate])
 
+  // Calculate violations
+  const violations = useMemo(() => {
+    return checkViolations({
+      assignments: localAssignments,
+      doctors,
+      units,
+      rosterPeriod
+    })
+  }, [localAssignments, doctors, units, rosterPeriod])
+
   // Pre-index assignments for fast lookup: [doctorId][dateStr] = Assignment[]
   const assignmentIndex = useMemo(() => {
     const index: Record<string, Record<string, Assignment[]>> = {}
     
-    assignments.forEach(assignment => {
+    localAssignments.forEach(assignment => {
       const doctorId = assignment.doctor.id
       const dateStr = format(parseISO(assignment.date), 'yyyy-MM-dd')
       
@@ -96,7 +120,20 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
     })
     
     return index
-  }, [assignments])
+  }, [localAssignments])
+
+  // Index violations by doctor and date for fast lookup
+  const violationIndex = useMemo(() => {
+    const index: Record<string, Record<string, Violation[]>> = {}
+    
+    violations.forEach(violation => {
+      if (!index[violation.doctorId]) index[violation.doctorId] = {}
+      if (!index[violation.doctorId][violation.date]) index[violation.doctorId][violation.date] = []
+      index[violation.doctorId][violation.date].push(violation)
+    })
+    
+    return index
+  }, [violations])
 
   // Filter doctors
   const filteredDoctors = useMemo(() => {
@@ -133,6 +170,7 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
     const dateStr = format(date, 'yyyy-MM-dd')
     const dayOfWeek = getDay(date)
     const doctorAssignments = assignmentIndex[doctor.id]?.[dateStr] || []
+    const cellViolations = violationIndex[doctor.id]?.[dateStr] || []
     
     if (doctorAssignments.length > 0) {
       // Show assignments
@@ -141,7 +179,8 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
         type: 'assignment',
         display: postNames.length > 1 ? postNames.join(' • ') : postNames[0],
         tooltip: postNames.join(', '),
-        assignments: doctorAssignments
+        assignments: doctorAssignments,
+        violations: cellViolations
       }
     } else if (doctor.clinicDays.includes(dayOfWeek)) {
       // Show clinic day
@@ -149,7 +188,8 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
         type: 'clinic',
         display: 'clinic',
         tooltip: 'Clinic day',
-        assignments: []
+        assignments: [],
+        violations: cellViolations
       }
     } else {
       // Empty cell
@@ -157,16 +197,112 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
         type: 'empty',
         display: '',
         tooltip: '',
-        assignments: []
+        assignments: [],
+        violations: cellViolations
+      }
+    }
+  }
+
+  // Save assignment changes
+  const saveAssignmentChanges = useCallback(async (updatedAssignment: Assignment, isDelete: boolean = false) => {
+    if (!editable || isSaving) return
+    
+    setIsSaving(true)
+    try {
+      if (isDelete) {
+        const response = await fetch(`/api/admin/schedules/assignments?assignmentId=${updatedAssignment.id}`, {
+          method: 'DELETE'
+        })
+        
+        if (response.ok) {
+          setLocalAssignments(prev => prev.filter(a => a.id !== updatedAssignment.id))
+          onAssignmentUpdate?.(localAssignments.filter(a => a.id !== updatedAssignment.id))
+        }
+      } else {
+        const response = await fetch('/api/admin/schedules/assignments', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assignmentId: updatedAssignment.id,
+            doctorId: updatedAssignment.doctor.id,
+            postName: updatedAssignment.postName
+          })
+        })
+        
+        if (response.ok) {
+          setLocalAssignments(prev => 
+            prev.map(a => a.id === updatedAssignment.id ? updatedAssignment : a)
+          )
+          onAssignmentUpdate?.(localAssignments.map(a => a.id === updatedAssignment.id ? updatedAssignment : a))
+        }
+      }
+    } catch (error) {
+      console.error('Error saving assignment:', error)
+      // Could add toast notification here
+    } finally {
+      setIsSaving(false)
+      setEditingCell(null)
+    }
+  }, [editable, isSaving, localAssignments, onAssignmentUpdate])
+
+  // Get violation color and icon
+  const getViolationIndicator = (violations: Violation[]) => {
+    if (violations.length === 0) return null
+    
+    const highViolations = violations.filter(v => v.severity === 'high')
+    const mediumViolations = violations.filter(v => v.severity === 'medium')
+    
+    if (highViolations.length > 0) {
+      return {
+        color: 'text-red-500',
+        bgColor: 'bg-red-50',
+        borderColor: 'border-red-200',
+        icon: AlertTriangle,
+        tooltip: highViolations.map(v => v.message).join('; ')
+      }
+    } else if (mediumViolations.length > 0) {
+      return {
+        color: 'text-yellow-500',
+        bgColor: 'bg-yellow-50',
+        borderColor: 'border-yellow-200', 
+        icon: AlertTriangle,
+        tooltip: mediumViolations.map(v => v.message).join('; ')
+      }
+    } else {
+      return {
+        color: 'text-orange-500',
+        bgColor: 'bg-orange-50',
+        borderColor: 'border-orange-200',
+        icon: AlertTriangle,
+        tooltip: violations.map(v => v.message).join('; ')
       }
     }
   }
 
   return (
     <div className="space-y-4">
-      {/* Legend */}
+      {/* Legend and Controls */}
       <div className="bg-white rounded-lg border p-4">
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Legend</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-gray-900">Legend & Controls</h3>
+          {editable && (
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowViolations(!showViolations)}
+              >
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                {showViolations ? 'Hide' : 'Show'} Violations
+              </Button>
+              {violations.length > 0 && (
+                <span className="text-xs text-gray-500">
+                  {violations.length} violation{violations.length !== 1 ? 's' : ''} found
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         <div className="flex flex-wrap gap-4 text-xs">
           <div className="flex items-center space-x-2">
             <div className={`px-2 py-1 rounded border ${POST_COLORS.clinic}`}>Clinic</div>
@@ -180,6 +316,28 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
           <div className="flex items-center space-x-2">
             <div className={`px-2 py-1 rounded border ${POST_COLORS.standby}`}>Standby/Call</div>
           </div>
+          {showViolations && (
+            <>
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-red-500" />
+                <span>High Violation</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <span>Medium Violation</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-orange-500" />
+                <span>Low Violation</span>
+              </div>
+            </>
+          )}
+          {editable && (
+            <div className="flex items-center space-x-2">
+              <Edit className="w-4 h-4 text-blue-500" />
+              <span>Click cells to edit</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -290,6 +448,9 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
                         const cellContent = getCellContent(doctor, date)
                         const isWeekendDay = isWeekend(date)
                         const isTodayDate = isToday(date)
+                        const dateStr = format(date, 'yyyy-MM-dd')
+                        const violationIndicator = showViolations ? getViolationIndicator(cellContent.violations) : null
+                        const isEditing = editingCell?.doctorId === doctor.id && editingCell?.dateStr === dateStr
                         
                         return (
                           <td
@@ -298,10 +459,26 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
                               border-b border-r px-1 py-2 text-center text-xs relative
                               ${isWeekendDay ? 'bg-blue-50' : 'bg-white'}
                               ${isTodayDate ? 'ring-1 ring-blue-300 ring-inset' : ''}
+                              ${violationIndicator ? violationIndicator.bgColor : ''}
+                              ${violationIndicator ? violationIndicator.borderColor : ''}
+                              ${editable && !isEditing ? 'hover:bg-gray-100 cursor-pointer' : ''}
                             `}
-                            title={cellContent.tooltip}
+                            title={violationIndicator?.tooltip || cellContent.tooltip}
+                            onClick={() => {
+                              if (editable && !isEditing && cellContent.type !== 'clinic') {
+                                setEditingCell({ doctorId: doctor.id, dateStr })
+                              }
+                            }}
                           >
-                            {cellContent.type === 'assignment' && (
+                            {/* Violation Indicator */}
+                            {violationIndicator && showViolations && (
+                              <div className={`absolute top-0 right-0 ${violationIndicator.color}`}>
+                                <violationIndicator.icon className="w-3 h-3" />
+                              </div>
+                            )}
+
+                            {/* Assignment Content */}
+                            {cellContent.type === 'assignment' && !isEditing && (
                               <div className="space-y-1">
                                 {cellContent.assignments.map((assignment, i) => (
                                   <div
@@ -313,14 +490,70 @@ export default function RosterMatrix({ rosterPeriod, assignments, doctors, units
                                     title={`${assignment.postName} - ${doctor.name}`}
                                   >
                                     {assignment.postName}
+                                    {editable && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          saveAssignmentChanges(assignment, true)
+                                        }}
+                                        className="ml-1 text-red-500 hover:text-red-700"
+                                        title="Delete assignment"
+                                      >
+                                        ×
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>
                             )}
                             
-                            {cellContent.type === 'clinic' && (
+                            {/* Clinic Content */}
+                            {cellContent.type === 'clinic' && !isEditing && (
                               <div className={`px-1 py-0.5 rounded text-xs border ${POST_COLORS.clinic}`}>
                                 clinic
+                              </div>
+                            )}
+
+                            {/* Empty Cell */}
+                            {cellContent.type === 'empty' && !isEditing && editable && (
+                              <div className="text-gray-400 text-xs">
+                                +
+                              </div>
+                            )}
+
+                            {/* Editing Interface */}
+                            {isEditing && (
+                              <div className="space-y-1 min-w-[120px]">
+                                <select
+                                  className="w-full text-xs border rounded px-1 py-0.5"
+                                  defaultValue=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      const newAssignment: Assignment = {
+                                        id: `temp_${Date.now()}`,
+                                        date: dateStr,
+                                        postName: e.target.value,
+                                        doctor
+                                      }
+                                      // You'd need to implement creating new assignments here
+                                    }
+                                  }}
+                                >
+                                  <option value="">Select post...</option>
+                                  <option value="Ward 6">Ward 6</option>
+                                  <option value="ED1">ED1</option>
+                                  <option value="ED2">ED2</option>
+                                  <option value="Standby Oncall">Standby Oncall</option>
+                                </select>
+                                <div className="flex justify-center space-x-1">
+                                  <button
+                                    onClick={() => setEditingCell(null)}
+                                    className="text-gray-500 hover:text-gray-700"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </td>

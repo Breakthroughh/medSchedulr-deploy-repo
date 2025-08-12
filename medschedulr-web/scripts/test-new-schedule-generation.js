@@ -16,7 +16,7 @@ async function main() {
   }
 
   // Delete existing assignments
-  await prisma.scheduleAssignment.deleteMany({
+  await prisma.schedule_assignments.deleteMany({
     where: { rosterPeriodId: rosterPeriod.id }
   })
 
