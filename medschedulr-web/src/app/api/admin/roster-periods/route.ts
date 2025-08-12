@@ -33,7 +33,8 @@ export async function GET() {
               where: {
                 status: 'COMPLETED'
               }
-            }
+            },
+            schedule_assignments: true
           }
         }
       },
