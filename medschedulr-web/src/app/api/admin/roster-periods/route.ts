@@ -119,9 +119,9 @@ export async function POST(request: NextRequest) {
     // Generate date range
     const dates = []
     let currentDate = new Date(start)
-    const endDate = new Date(end)
+    const periodEndDate = new Date(end)
     
-    while (currentDate <= endDate) {
+    while (currentDate <= periodEndDate) {
       dates.push(new Date(currentDate))
       currentDate.setDate(currentDate.getDate() + 1)
     }
