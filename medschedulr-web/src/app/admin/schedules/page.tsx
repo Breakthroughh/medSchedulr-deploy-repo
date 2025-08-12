@@ -430,10 +430,12 @@ export default function AdminSchedulesPage() {
                               </span>
                               <span className="text-xs text-gray-500">({dayCount} days)</span>
                             </div>
-                            {period._count && period._count.scheduleGenerations > 0 && (
+                            {(period._count?.scheduleGenerations > 0 || period.scheduleGenerations?.length > 0) && (
                               <div className="flex items-center space-x-2">
                                 <Clock className="w-4 h-4 text-green-500" />
-                                <span className="text-xs text-green-600">{period._count.scheduleGenerations} schedule(s) generated</span>
+                                <span className="text-xs text-green-600">
+                                  {period._count?.scheduleGenerations || period.scheduleGenerations?.length || 0} schedule(s) generated
+                                </span>
                               </div>
                             )}
                           </div>
@@ -500,7 +502,9 @@ export default function AdminSchedulesPage() {
                             })()
                           )}
                           
-                          {((period._count && period._count.scheduleGenerations > 0) || activeJobs.get(period.id)?.status === 'COMPLETED') && (
+                          {(period._count?.scheduleGenerations > 0 || 
+                           period.scheduleGenerations?.length > 0 || 
+                           activeJobs.get(period.id)?.status === 'COMPLETED') && (
                             <>
                               <Button
                                 size="sm"
