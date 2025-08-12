@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { refreshDoctorWorkloads, getWorkloadForPythonAPI } from "@/lib/workloadCalculator"
 
 // Python API configuration
 const PYTHON_API_BASE = process.env.PYTHON_API_BASE_URL || 'http://localhost:8000'
@@ -29,6 +30,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Roster period not found" }, { status: 404 })
     }
 
+    // Refresh workload data before generating schedule
+    console.log('🔄 Refreshing doctor workload data...')
+    const workloadSummaries = await refreshDoctorWorkloads(rosterPeriod.startDate)
+    const workloadData = await getWorkloadForPythonAPI(workloadSummaries)
+    
     // Get all doctors with their units and availability
     const doctors = await prisma.doctors.findMany({
       include: {
@@ -128,6 +134,7 @@ export async function POST(request: NextRequest) {
       posts_weekday: postsWeekday,
       posts_weekend: postsWeekend,
       availability: availabilityData,
+      workload_data: workloadData, // Enhanced workload information
       solver_config: {
         lambdaRest: solverConfig.lambdaRest,
         lambdaGap: solverConfig.lambdaGap,
