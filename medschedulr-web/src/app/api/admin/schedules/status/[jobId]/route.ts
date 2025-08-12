@@ -57,8 +57,8 @@ export async function GET(
           where: { rosterPeriodId: scheduleGeneration.rosterPeriodId }
         })
         
-        // Create new schedule assignments
-        const assignments = schedule.map((assignment: any) => ({
+        // Create new schedule assignments with Standby Oncall post-processing
+        let assignments = schedule.map((assignment: any) => ({
           id: `assign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           rosterPeriodId: scheduleGeneration.rosterPeriodId,
           doctorId: assignment.doctor,
@@ -66,6 +66,52 @@ export async function GET(
           postName: assignment.post,
           scheduleGenerationId: scheduleGeneration.id
         }))
+        
+        // Post-process Standby Oncall assignments to ensure same doctor for Sat+Sun
+        const standbyOncallAssignments = assignments.filter(a => a.postName === 'Standby Oncall')
+        if (standbyOncallAssignments.length > 0) {
+          console.log(`🎯 Post-processing ${standbyOncallAssignments.length} Standby Oncall assignments`)
+          
+          // Group by weekend pairs (Saturday + Sunday)
+          const weekendGroups = new Map<string, typeof assignments>()
+          
+          standbyOncallAssignments.forEach(assignment => {
+            const date = new Date(assignment.date)
+            const weekday = date.getDay()
+            
+            if (weekday === 6 || weekday === 0) { // Saturday or Sunday
+              // Get the Saturday date for this weekend
+              const saturday = new Date(date)
+              if (weekday === 0) { // If Sunday, get previous Saturday
+                saturday.setDate(saturday.getDate() - 1)
+              }
+              const weekendKey = saturday.toISOString().split('T')[0]
+              
+              if (!weekendGroups.has(weekendKey)) {
+                weekendGroups.set(weekendKey, [])
+              }
+              weekendGroups.get(weekendKey)!.push(assignment)
+            }
+          })
+          
+          // For each weekend, make sure Saturday doctor also works Sunday
+          weekendGroups.forEach((weekendAssignments, weekendKey) => {
+            const saturdayAssignment = weekendAssignments.find(a => new Date(a.date).getDay() === 6)
+            const sundayAssignment = weekendAssignments.find(a => new Date(a.date).getDay() === 0)
+            
+            if (saturdayAssignment && sundayAssignment && saturdayAssignment.doctorId !== sundayAssignment.doctorId) {
+              console.log(`🔄 Weekend ${weekendKey}: Changing Sunday doctor from ${sundayAssignment.doctorId} to ${saturdayAssignment.doctorId}`)
+              
+              // Update the Sunday assignment to use the Saturday doctor
+              const assignmentIndex = assignments.findIndex(a => 
+                a.id === sundayAssignment.id
+              )
+              if (assignmentIndex !== -1) {
+                assignments[assignmentIndex].doctorId = saturdayAssignment.doctorId
+              }
+            }
+          })
+        }
         
         await prisma.schedule_assignments.createMany({
           data: assignments
