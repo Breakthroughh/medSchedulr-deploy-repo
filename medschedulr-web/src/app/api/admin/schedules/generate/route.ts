@@ -147,6 +147,17 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Starting schedule generation for roster period ${rosterPeriodId}`)
     console.log(`📊 Data: ${doctors.length} doctors, ${units.length} units, ${scheduleRequest.availability.length} availability records`)
+    
+    // Debug: Log post availability breakdown
+    const postAvailabilityBreakdown = scheduleRequest.availability.reduce((acc, avail) => {
+      if (!acc[avail.post]) acc[avail.post] = 0
+      acc[avail.post]++
+      return acc
+    }, {} as Record<string, number>)
+    
+    console.log('📋 Post availability breakdown:', postAvailabilityBreakdown)
+    console.log('📋 Posts Weekday:', postsWeekday)
+    console.log('📋 Posts Weekend:', postsWeekend)
     console.log('📋 Schedule request data:', JSON.stringify(scheduleRequest, null, 2))
 
     // Call Python API

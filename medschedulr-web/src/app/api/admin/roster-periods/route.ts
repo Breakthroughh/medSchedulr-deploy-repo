@@ -128,29 +128,33 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 Creating availability matrix: ${doctors.length} doctors × ${dates.length} dates × ${posts.length} posts = ${doctors.length * dates.length * posts.length} slots`)
 
-    let slotsCreated = 0
-
-    // Create availability slots: ALL default to available: true
+    // Create availability slots: ALL default to available: true (batch create for performance)
+    const availabilitySlots = []
     for (const doctor of doctors) {
       for (const date of dates) {
         for (const post of posts) {
-          await prisma.availability.create({
-            data: {
-              id: `avail_${period.id}_${doctor.id}_${post.id}_${date.getTime()}`,
-              doctorId: doctor.id,
-              rosterPeriodId: period.id,
-              postConfigId: post.id,
-              date: date,
-              available: true, // DEFAULT: All slots available
-              status: 'REQUESTED'
-            }
+          availabilitySlots.push({
+            id: `avail_${period.id}_${doctor.id}_${post.id}_${date.getTime()}`,
+            doctorId: doctor.id,
+            rosterPeriodId: period.id,
+            postConfigId: post.id,
+            date: date,
+            available: true, // DEFAULT: All slots available
+            status: 'REQUESTED'
           })
-          slotsCreated++
         }
       }
     }
 
-    console.log(`✅ Created ${slotsCreated} availability slots for roster period: ${period.name}`)
+    console.log(`📝 Preparing to create ${availabilitySlots.length} availability slots...`)
+
+    // Batch create all availability slots
+    const result = await prisma.availability.createMany({
+      data: availabilitySlots,
+      skipDuplicates: true // Skip if any exist (shouldn't happen but safer)
+    })
+
+    console.log(`✅ Created ${result.count} availability slots for roster period: ${period.name}`)
 
     // Audit log
     await prisma.audit_logs.create({
