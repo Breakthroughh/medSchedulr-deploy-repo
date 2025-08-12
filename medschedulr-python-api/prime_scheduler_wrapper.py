@@ -102,11 +102,20 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
             clinic_days[unit['name']] = unit['clinic_days']
         
         # Extract posts configuration  
-        posts_weekday = config['posts_weekday']
+        posts_weekday = config['posts_weekday'].copy()
         posts_weekend = config['posts_weekend']
         
-        # On-call posts for rest/spacing logic (include wards, ED, and standby)
-        oncall_posts = set(posts_weekday + posts_weekend)
+        # Add clinic posts to weekday posts (clinics only happen on weekdays)
+        for unit_name in clinic_days.keys():
+            clinic_post = f"clinic:{unit_name}"
+            if clinic_post not in posts_weekday:
+                posts_weekday.append(clinic_post)
+        
+        logger.info(f"Added {len(clinic_days)} clinic posts to weekday posts")
+        logger.info(f"Final posts_weekday: {posts_weekday}")
+        
+        # On-call posts for rest/spacing logic (include wards, ED, and standby, but NOT clinics)
+        oncall_posts = set(posts_weekday + posts_weekend) - {f"clinic:{u}" for u in clinic_days.keys()}
         
         # Extract doctor information and build doctor_info dict
         doctors = []
@@ -172,12 +181,25 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                 key = (avail['doctor_id'], date_idx, avail['post'])
                 availability[key] = avail['available']
         
-        # Fill in missing availability with False (not available)
+        # Fill in missing availability with False (not available)  
+        # Special handling for clinic posts - only available for doctors in the right unit
         for d in D:
             for s in S:
                 for t in posts_by_day[s]:
                     if (d, s, t) not in availability:
-                        availability[(d, s, t)] = False
+                        # For clinic posts, check if doctor is in the right unit
+                        if t.startswith("clinic:"):
+                            unit_name = t.split(":", 1)[1]
+                            doctor_unit = doctor_info[d]["unit"]
+                            # Only make available if on clinic day and in right unit
+                            if (doctor_unit == unit_name and 
+                                date_list[s].weekday() in clinic_days.get(unit_name, [])):
+                                availability[(d, s, t)] = True
+                            else:
+                                availability[(d, s, t)] = False
+                        else:
+                            # Non-clinic posts default to False
+                            availability[(d, s, t)] = False
         
         # REMOVED: No longer force D[0] availability - rely on Phase 2 relaxation instead
         # Check for posts with no available doctors (will be handled by Phase 2 slack)
@@ -301,6 +323,25 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                     day_vars = [x[d, s, t] for t in posts_by_day[s] if (d, s, t) in x]
                     if day_vars:
                         constraints.append(cp.sum(day_vars) <= 1)
+            
+            # === CLINIC ASSIGNMENT CONSTRAINTS ===
+            # Each unit must have exactly 1 doctor assigned to clinic on each clinic day
+            for u, weekdays in clinic_days.items():
+                clinic_post = f"clinic:{u}"
+                unit_docs = [d for d in D if doctor_info[d]["unit"] == u]
+                
+                for s, date in enumerate(date_list):
+                    if date.weekday() in weekdays and clinic_post in posts_by_day[s]:
+                        clinic_vars = [x[d, s, clinic_post] for d in unit_docs if (d, s, clinic_post) in x]
+                        if clinic_vars:
+                            if RELAX:
+                                # Soft constraint with slack for clinic coverage
+                                clinic_slack = cp.Variable(nonneg=True)
+                                penalty_terms.append(BIG_M * clinic_slack)
+                                constraints.append(cp.sum(clinic_vars) + clinic_slack >= 1)
+                            else:
+                                # Hard constraint: exactly 1 doctor from unit must do clinic
+                                constraints.append(cp.sum(clinic_vars) == 1)
             
             # === LINEAR STANDBY ONCALL WEEKEND CONSTRAINTS ===
             
@@ -574,22 +615,26 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                         "post": t
                     })
             
-            # Add clinic assignments for all doctors in units on clinic days
-            for u, weekdays in clinic_days.items():
-                unit_docs = [d for d in D if doctor_info[d]["unit"] == u]
-                for s, date in enumerate(date_list):
-                    if date.weekday() in weekdays:
-                        for d in unit_docs:
-                            results.append({
-                                "doctor": d,
-                                "date": date.isoformat(),
-                                "post": "clinic"
-                            })
+            # Clinic assignments are now handled by the solver directly - no post-processing needed
             
             logger.info(f"Generated schedule with {len(results)} assignments")
             
-            # Log Standby Oncall assignments specifically
-            standby_assignments = [r for r in results if r["post"] == "Standby Oncall"]
+            # Log assignment breakdown by type
+            assignment_counts = {}
+            clinic_assignments = []
+            standby_assignments = []
+            
+            for assignment in results:
+                post = assignment["post"]
+                if post.startswith("clinic:"):
+                    clinic_assignments.append(assignment)
+                elif post == "Standby Oncall":
+                    standby_assignments.append(assignment)
+                
+                assignment_counts[post] = assignment_counts.get(post, 0) + 1
+            
+            logger.info(f"Assignment breakdown: {assignment_counts}")
+            logger.info(f"Clinic assignments: {len(clinic_assignments)} (distinct unit/date pairs)")
             logger.info(f"Standby Oncall assignments: {len(standby_assignments)}")
             for assignment in standby_assignments:
                 date_obj = datetime.datetime.strptime(assignment["date"], '%Y-%m-%d').date()
