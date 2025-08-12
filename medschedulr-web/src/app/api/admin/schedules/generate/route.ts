@@ -158,6 +158,22 @@ export async function POST(request: NextRequest) {
     console.log('📋 Post availability breakdown:', postAvailabilityBreakdown)
     console.log('📋 Posts Weekday:', postsWeekday)
     console.log('📋 Posts Weekend:', postsWeekend)
+    
+    // Debug: Log Standby Oncall availability specifically
+    const standbyOncallAvailability = scheduleRequest.availability.filter(avail => 
+      avail.post === 'Standby Oncall'
+    )
+    console.log(`📋 Standby Oncall availability: ${standbyOncallAvailability.length} records`)
+    console.log(`📋 Standby Oncall available: ${standbyOncallAvailability.filter(a => a.available).length} records`)
+    
+    // Debug: Log weekend Standby Oncall availability
+    const weekendStandbyAvailability = standbyOncallAvailability.filter(avail => {
+      const date = new Date(avail.date)
+      return date.getDay() === 0 || date.getDay() === 6 // Sunday or Saturday
+    })
+    console.log(`📋 Weekend Standby Oncall availability: ${weekendStandbyAvailability.length} records`)
+    console.log(`📋 Weekend Standby Oncall available: ${weekendStandbyAvailability.filter(a => a.available).length} records`)
+    
     console.log('📋 Schedule request data:', JSON.stringify(scheduleRequest, null, 2))
 
     // Call Python API

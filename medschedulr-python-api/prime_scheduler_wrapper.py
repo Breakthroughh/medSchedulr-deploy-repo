@@ -114,7 +114,43 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                     if (d, s, t) not in availability:
                         availability[(d, s, t)] = False
         
+        # Ensure at least one doctor is available for each post on each day
+        # This prevents the solver from failing when no doctors are available
+        for s in S:
+            for t in posts_by_day[s]:
+                available_doctors = [d for d in D if availability.get((d, s, t), False)]
+                if not available_doctors:
+                    # If no doctors are available for this post on this day,
+                    # make the first doctor available to ensure the solver can assign someone
+                    logger.warning(f"No doctors available for {t} on day {s} ({date_list[s]}), making first doctor available")
+                    availability[(D[0], s, t)] = True
+        
         logger.info(f"Availability records: {len([k for k, v in availability.items() if v])}/{len(availability)} available")
+        
+        # Debug: Log availability breakdown by post
+        post_availability = {}
+        for (d, s, t), avail in availability.items():
+            if t not in post_availability:
+                post_availability[t] = {'available': 0, 'total': 0}
+            post_availability[t]['total'] += 1
+            if avail:
+                post_availability[t]['available'] += 1
+        
+        logger.info("Post availability breakdown:")
+        for post, counts in post_availability.items():
+            logger.info(f"  {post}: {counts['available']}/{counts['total']} available")
+        
+        # Debug: Log weekend Standby Oncall specifically
+        standby_weekend_available = []
+        for s in S:
+            if date_list[s].weekday() >= 5:  # Weekend
+                for d in D:
+                    if availability.get((d, s, "Standby Oncall"), False):
+                        standby_weekend_available.append((d, date_list[s]))
+        
+        logger.info(f"Standby Oncall weekend availability: {len(standby_weekend_available)} slots")
+        if standby_weekend_available:
+            logger.info(f"  Available doctors: {[f'{d} on {date}' for d, date in standby_weekend_available[:5]]}")
         
         # Extract solver configuration
         solver_config = config['solver_config']

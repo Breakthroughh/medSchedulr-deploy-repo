@@ -159,6 +159,17 @@ export async function POST(request: NextRequest) {
 
     console.log(`📝 Preparing to create ${availabilitySlots.length} availability slots...`)
 
+    // Debug: Log breakdown by post type
+    const postBreakdown = availabilitySlots.reduce((acc, slot) => {
+      const post = posts.find(p => p.id === slot.postConfigId)
+      const postName = post ? post.name : 'Unknown'
+      if (!acc[postName]) acc[postName] = 0
+      acc[postName]++
+      return acc
+    }, {} as Record<string, number>)
+    
+    console.log('📋 Availability slots by post:', postBreakdown)
+
     // Batch create all availability slots
     const result = await prisma.availability.createMany({
       data: availabilitySlots,
