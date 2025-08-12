@@ -5,7 +5,7 @@ import { format, parseISO, isWeekend, isToday, getDay } from "date-fns"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
-import { Search, Filter, Edit, Save, X, AlertTriangle, CheckCircle } from "lucide-react"
+import { Search, Filter, Edit, Save, X, AlertTriangle, CheckCircle, Download } from "lucide-react"
 import { checkViolations, type Violation } from "@/lib/violationChecker"
 
 interface Doctor {
@@ -117,10 +117,13 @@ export default function RosterMatrix({
 
   const calculateColumnTally = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd')
-    return localAssignments.filter(a => 
-      format(new Date(a.date), 'yyyy-MM-dd') === dateStr &&
-      !a.postName.toLowerCase().includes('clinic')  // Exclude clinic from tallies
-    ).length
+    // Only count oncall shifts (Ward, ED, Standby), not clinic
+    const oncallPosts = ['ward', 'ed', 'standby', 'call']
+    return localAssignments.filter(a => {
+      const matchesDate = format(new Date(a.date), 'yyyy-MM-dd') === dateStr
+      const isOncallPost = oncallPosts.some(post => a.postName.toLowerCase().includes(post))
+      return matchesDate && isOncallPost
+    }).length
   }
 
   // Calculate violations
@@ -192,6 +195,63 @@ export default function RosterMatrix({
     
     return grouped
   }, [filteredDoctors])
+
+  // CSV Export Function
+  const exportToCSV = useCallback(() => {
+    const csvData: string[][] = []
+    
+    // Header row
+    const headerRow = ['Doctor', 'Unit', 'Category', ...dateRange.map(date => format(date, 'MMM dd (EEE)')), 'Total Oncalls']
+    csvData.push(headerRow)
+    
+    // Data rows for each doctor
+    Object.entries(doctorsByUnit).forEach(([unitName, unitDoctors]) => {
+      unitDoctors.forEach(doctor => {
+        const row = [
+          doctor.name,
+          doctor.unit,
+          doctor.category
+        ]
+        
+        // Add assignments for each date
+        dateRange.forEach(date => {
+          const cellContent = getCellContent(doctor, date)
+          if (cellContent.type === 'assignment') {
+            row.push(cellContent.display)
+          } else if (cellContent.type === 'clinic_placeholder') {
+            row.push('clinic available')
+          } else {
+            row.push('')
+          }
+        })
+        
+        // Add row total
+        row.push(calculateRowTally(doctor).toString())
+        csvData.push(row)
+      })
+    })
+    
+    // Add bottom tally row
+    const tallyRow = ['DAILY ONCALL TOTAL', '', '', ...dateRange.map(date => calculateColumnTally(date).toString())]
+    tallyRow.push(dateRange.reduce((sum, date) => sum + calculateColumnTally(date), 0).toString())
+    csvData.push(tallyRow)
+    
+    // Convert to CSV format
+    const csvContent = csvData.map(row => 
+      row.map(cell => `"${cell.replace(/"/g, '""')}"}`).join(',')
+    ).join('\n')
+    
+    // Download CSV
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `schedule-${rosterPeriod.name}-${format(new Date(), 'yyyy-MM-dd')}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }, [doctorsByUnit, dateRange, calculateRowTally, calculateColumnTally, rosterPeriod.name])
 
   // Get cell content for a doctor on a specific date
   const getCellContent = (doctor: Doctor, date: Date) => {
@@ -383,6 +443,15 @@ export default function RosterMatrix({
             <Filter className="w-4 h-4 mr-2" />
             {showFilters ? 'Hide' : 'Show'} Filters
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToCSV}
+            className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
         </div>
         
         {showFilters && (
@@ -457,10 +526,6 @@ export default function RosterMatrix({
                           ))}
                         </div>
                       )}
-                      {/* Column tally */}
-                      <div className="text-xs text-gray-500 mt-1">
-                        ({calculateColumnTally(date)})
-                      </div>
                     </th>
                   )
                 })}
@@ -616,6 +681,22 @@ export default function RosterMatrix({
                   ))}
                 </React.Fragment>
               ))}
+              
+              {/* Bottom tally row */}
+              <tr className="bg-gray-50 border-t-2">
+                <td className="sticky left-0 z-10 bg-gray-100 border-r px-4 py-3 text-sm font-medium text-gray-900">
+                  Daily Oncall Total
+                </td>
+                {dateRange.map((date, index) => (
+                  <td key={index} className="border-b px-2 py-3 text-center text-xs font-bold text-gray-900">
+                    {calculateColumnTally(date)}
+                  </td>
+                ))}
+                <td className="px-2 py-3 text-center text-xs font-medium text-gray-900">
+                  {/* Total of all tallies */}
+                  {dateRange.reduce((sum, date) => sum + calculateColumnTally(date), 0)}
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

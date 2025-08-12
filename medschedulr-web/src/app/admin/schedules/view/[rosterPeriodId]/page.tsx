@@ -193,8 +193,39 @@ export default function ScheduleViewPage() {
             <div className="flex items-center space-x-3">
               <Button 
                 variant="outline"
-                disabled
-                title="Export functionality coming soon"
+                onClick={() => {
+                  if (view === 'matrix') {
+                    // Export will be handled by the matrix component
+                    alert('Please use the Export CSV button in the matrix view below')
+                  } else {
+                    // Simple export for doctor view
+                    const csvData = [
+                      ['Doctor', 'Unit', 'Category', 'Total Assignments', 'Assignments'],
+                      ...assignmentsByDoctor.map(({ doctor, assignments: doctorAssignments }) => [
+                        doctor.name,
+                        doctor.unit,
+                        doctor.category,
+                        doctorAssignments.length.toString(),
+                        doctorAssignments.map(a => `${a.date}: ${a.postName}`).join('; ')
+                      ])
+                    ]
+                    
+                    const csvContent = csvData.map(row => 
+                      row.map(cell => `"${cell.replace(/"/g, '""')}"}`).join(',')
+                    ).join('\n')
+                    
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+                    const link = document.createElement('a')
+                    const url = URL.createObjectURL(blob)
+                    link.setAttribute('href', url)
+                    link.setAttribute('download', `schedule-${rosterPeriod.name}-doctor-view.csv`)
+                    link.style.visibility = 'hidden'
+                    document.body.appendChild(link)
+                    link.click()
+                    document.body.removeChild(link)
+                  }
+                }}
+                title="Export schedule data to CSV"
               >
                 <Download className="w-4 h-4 mr-2" />
                 Export CSV
