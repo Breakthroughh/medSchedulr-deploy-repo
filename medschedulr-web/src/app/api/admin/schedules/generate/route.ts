@@ -174,6 +174,14 @@ export async function POST(request: NextRequest) {
     console.log(`📋 Weekend Standby Oncall availability: ${weekendStandbyAvailability.length} records`)
     console.log(`📋 Weekend Standby Oncall available: ${weekendStandbyAvailability.filter(a => a.available).length} records`)
     
+    // Debug: Log doctor lastStandby values
+    const doctorStandbyInfo = scheduleRequest.doctors.map(d => ({
+      name: d.name,
+      lastStandby: d.last_standby,
+      category: d.category
+    }))
+    console.log('📋 Doctor Standby Info:', JSON.stringify(doctorStandbyInfo, null, 2))
+    
     console.log('📋 Schedule request data:', JSON.stringify(scheduleRequest, null, 2))
 
     // Call Python API
@@ -187,11 +195,13 @@ export async function POST(request: NextRequest) {
 
     if (!pythonResponse.ok) {
       const error = await pythonResponse.text()
-      console.error('Python API error:', error)
+      console.error('❌ Python API error:', error)
+      console.error(`❌ Status: ${pythonResponse.status} ${pythonResponse.statusText}`)
       return NextResponse.json({ error: "Schedule generation failed" }, { status: 500 })
     }
 
     const result = await pythonResponse.json()
+    console.log('🐍 Python API Response:', JSON.stringify(result, null, 2))
     
     // Create schedule generation record
     const scheduleGeneration = await prisma.schedule_generations.create({
