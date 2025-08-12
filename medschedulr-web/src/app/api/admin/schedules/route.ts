@@ -39,7 +39,13 @@ export async function GET(request: NextRequest) {
         where: { rosterPeriodId },
         include: {
           doctors: {
-            include: { units: true }
+            include: { 
+              units: {
+                include: {
+                  clinic_days: true
+                }
+              }
+            }
           }
         },
         orderBy: [
@@ -47,6 +53,25 @@ export async function GET(request: NextRequest) {
           { postName: 'asc' },
           { doctors: { displayName: 'asc' } }
         ]
+      })
+
+      // Get all doctors for the matrix view
+      const allDoctors = await prisma.doctors.findMany({
+        where: { active: true },
+        include: {
+          units: {
+            include: {
+              clinic_days: true
+            }
+          }
+        },
+        orderBy: { displayName: 'asc' }
+      })
+
+      // Get all units
+      const allUnits = await prisma.unit.findMany({
+        where: { active: true },
+        orderBy: { name: 'asc' }
       })
 
       // Get roster period details
@@ -65,8 +90,22 @@ export async function GET(request: NextRequest) {
             id: assignment.doctors.id,
             name: assignment.doctors.displayName,
             unit: assignment.doctors.units.name,
-            category: assignment.doctors.category
+            unitId: assignment.doctors.units.id,
+            category: assignment.doctors.category,
+            clinicDays: assignment.doctors.units.clinic_days.map(cd => cd.weekday)
           }
+        })),
+        doctors: allDoctors.map(doctor => ({
+          id: doctor.id,
+          name: doctor.displayName,
+          unit: doctor.units.name,
+          unitId: doctor.units.id,
+          category: doctor.category,
+          clinicDays: doctor.units.clinic_days.map(cd => cd.weekday)
+        })),
+        units: allUnits.map(unit => ({
+          id: unit.id,
+          name: unit.name
         }))
       })
     } else {

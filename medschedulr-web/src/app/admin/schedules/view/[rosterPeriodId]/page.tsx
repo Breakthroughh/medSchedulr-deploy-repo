@@ -4,14 +4,17 @@ import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { redirect, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Calendar, ArrowLeft, Download, Users, Clock, CheckCircle } from "lucide-react"
+import { Calendar, ArrowLeft, Download, Users, Clock, CheckCircle, Grid } from "lucide-react"
 import { format, parseISO, startOfWeek, addDays } from "date-fns"
+import RosterMatrix from "@/components/RosterMatrix"
 
 interface Doctor {
   id: string
   name: string
   unit: string
+  unitId: string
   category: string
+  clinicDays: number[]
 }
 
 interface Assignment {
@@ -47,6 +50,8 @@ interface ScheduleData {
     endDate: string
   }
   assignments: Assignment[]
+  doctors: Doctor[]
+  units: Array<{ id: string; name: string }>
 }
 
 export default function ScheduleViewPage() {
@@ -56,7 +61,7 @@ export default function ScheduleViewPage() {
   
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<'calendar' | 'list'>('calendar')
+  const [view, setView] = useState<'calendar' | 'list' | 'matrix'>('matrix')
 
   if (status === "loading") return <div>Loading...</div>
   if (!session || session.user.role !== "ADMIN") redirect("/auth/login")
@@ -146,7 +151,7 @@ export default function ScheduleViewPage() {
     )
   }
 
-  const { scheduleGeneration, rosterPeriod, assignments } = scheduleData
+  const { scheduleGeneration, rosterPeriod, assignments, doctors, units } = scheduleData
   const assignmentsByDate = groupAssignmentsByDate(assignments)
   const assignmentsByDoctor = groupAssignmentsByDoctor(assignments)
 
@@ -239,6 +244,14 @@ export default function ScheduleViewPage() {
           <div className="p-4 border-b">
             <div className="flex space-x-1">
               <Button
+                variant={view === 'matrix' ? 'default' : 'outline'}
+                onClick={() => setView('matrix')}
+                size="sm"
+              >
+                <Grid className="w-4 h-4 mr-2" />
+                Matrix View
+              </Button>
+              <Button
                 variant={view === 'calendar' ? 'default' : 'outline'}
                 onClick={() => setView('calendar')}
                 size="sm"
@@ -258,7 +271,15 @@ export default function ScheduleViewPage() {
           </div>
 
           <div className="p-6">
-            {view === 'calendar' ? (
+            {view === 'matrix' ? (
+              /* Matrix View */
+              <RosterMatrix 
+                rosterPeriod={rosterPeriod}
+                assignments={assignments}
+                doctors={doctors}
+                units={units}
+              />
+            ) : view === 'calendar' ? (
               /* Calendar View */
               <div className="space-y-6">
                 {dateRange.map(date => {
