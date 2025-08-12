@@ -52,6 +52,8 @@ interface ScheduleData {
   assignments: Assignment[]
   doctors: Doctor[]
   units: Array<{ id: string; name: string }>
+  isClinicDay: { [doctorId: string]: { [dateStr: string]: boolean } }
+  clinicByDate: { [dateStr: string]: string[] }
 }
 
 export default function ScheduleViewPage() {
@@ -151,7 +153,7 @@ export default function ScheduleViewPage() {
     )
   }
 
-  const { scheduleGeneration, rosterPeriod, assignments, doctors, units } = scheduleData
+  const { scheduleGeneration, rosterPeriod, assignments, doctors, units, isClinicDay, clinicByDate } = scheduleData
   const assignmentsByDate = groupAssignmentsByDate(assignments)
   const assignmentsByDoctor = groupAssignmentsByDoctor(assignments)
 
@@ -270,6 +272,8 @@ export default function ScheduleViewPage() {
                 assignments={assignments}
                 doctors={doctors}
                 units={units}
+                isClinicDay={isClinicDay || {}}
+                clinicByDate={clinicByDate || {}}
                 editable={true}
                 onAssignmentUpdate={(updatedAssignments) => {
                   setScheduleData(prev => prev ? {

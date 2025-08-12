@@ -79,6 +79,44 @@ export async function GET(request: NextRequest) {
         where: { id: rosterPeriodId }
       })
 
+      if (!rosterPeriod) {
+        return NextResponse.json({ error: "Roster period not found" }, { status: 404 })
+      }
+
+      // Build isClinicDay map to prevent "available" chips on clinic days
+      const isClinicDay: { [doctorId: string]: { [dateStr: string]: boolean } } = {}
+      const startDate = new Date(rosterPeriod.startDate)
+      const endDate = new Date(rosterPeriod.endDate)
+      
+      for (const doctor of allDoctors) {
+        isClinicDay[doctor.id] = {}
+        const clinicWeekdays = doctor.units.clinic_days.map(cd => cd.weekday)
+        
+        // Check each date in the roster period
+        let currentDate = new Date(startDate)
+        while (currentDate <= endDate) {
+          const dateStr = currentDate.toISOString().split('T')[0]
+          const weekday = currentDate.getDay()
+          
+          // Mark as clinic day if this weekday is a clinic day for doctor's unit
+          isClinicDay[doctor.id][dateStr] = clinicWeekdays.includes(weekday)
+          
+          currentDate.setDate(currentDate.getDate() + 1)
+        }
+      }
+
+      // Build clinic assignments by date/unit for column headers
+      const clinicByDate: { [dateStr: string]: string[] } = {}
+      for (const assignment of assignments) {
+        if (assignment.postName.startsWith('clinic:')) {
+          const dateStr = assignment.date.toISOString().split('T')[0]
+          if (!clinicByDate[dateStr]) {
+            clinicByDate[dateStr] = []
+          }
+          clinicByDate[dateStr].push(assignment.postName)
+        }
+      }
+
       return NextResponse.json({
         scheduleGeneration,
         rosterPeriod,
@@ -106,7 +144,9 @@ export async function GET(request: NextRequest) {
         units: allUnits.map(unit => ({
           id: unit.id,
           name: unit.name
-        }))
+        })),
+        isClinicDay,
+        clinicByDate
       })
     } else {
       // Get all recent schedule generations

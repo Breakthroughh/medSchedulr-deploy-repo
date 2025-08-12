@@ -34,6 +34,8 @@ interface RosterMatrixProps {
   assignments: Assignment[]
   doctors: Doctor[]
   units: Array<{ id: string; name: string }>
+  isClinicDay?: { [doctorId: string]: { [dateStr: string]: boolean } }
+  clinicByDate?: { [dateStr: string]: string[] }
   editable?: boolean
   onAssignmentUpdate?: (updatedAssignments: Assignment[]) => void
 }
@@ -78,6 +80,8 @@ export default function RosterMatrix({
   assignments, 
   doctors, 
   units, 
+  isClinicDay = {},
+  clinicByDate = {},
   editable = false, 
   onAssignmentUpdate 
 }: RosterMatrixProps) {
@@ -102,6 +106,22 @@ export default function RosterMatrix({
     }
     return dates
   }, [rosterPeriod.startDate, rosterPeriod.endDate])
+
+  // Calculate tallies
+  const calculateRowTally = (doctor: Doctor) => {
+    return localAssignments.filter(a => 
+      a.doctor.id === doctor.id && 
+      !a.postName.toLowerCase().includes('clinic')  // Exclude clinic from tallies
+    ).length
+  }
+
+  const calculateColumnTally = (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd')
+    return localAssignments.filter(a => 
+      format(new Date(a.date), 'yyyy-MM-dd') === dateStr &&
+      !a.postName.toLowerCase().includes('clinic')  // Exclude clinic from tallies
+    ).length
+  }
 
   // Calculate violations
   const violations = useMemo(() => {
@@ -191,12 +211,13 @@ export default function RosterMatrix({
         assignments: doctorAssignments,
         violations: cellViolations
       }
-    } else if (doctor.clinicDays.includes(dayOfWeek)) {
-      // Show clinic day placeholder (actual assignments come from solver now)
+    } else if (isClinicDay[doctor.id]?.[dateStr]) {
+      // Check if this is a clinic day but no assignment exists
+      // Show empty/add state instead of "available" chip
       return {
-        type: 'clinic_placeholder',
-        display: 'clinic available',
-        tooltip: 'Available for clinic',
+        type: 'empty',
+        display: '+',
+        tooltip: 'Add assignment',
         assignments: [],
         violations: cellViolations
       }
@@ -426,9 +447,27 @@ export default function RosterMatrix({
                     >
                       <div>{format(date, 'MMM dd')}</div>
                       <div className="text-xs opacity-75">{format(date, 'EEE')}</div>
+                      {/* Show clinic pills for this date */}
+                      {clinicByDate[format(date, 'yyyy-MM-dd')] && (
+                        <div className="mt-1">
+                          {clinicByDate[format(date, 'yyyy-MM-dd')].map((clinicPost, i) => (
+                            <div key={i} className="inline-block px-1 py-0.5 rounded text-xs bg-blue-100 text-blue-800 border border-blue-200 mb-1">
+                              {formatPostName(clinicPost)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Column tally */}
+                      <div className="text-xs text-gray-500 mt-1">
+                        ({calculateColumnTally(date)})
+                      </div>
                     </th>
                   )
                 })}
+                {/* Row tally header */}
+                <th className="bg-gray-50 border-b px-2 py-3 text-center text-xs font-medium text-gray-900 min-w-[60px]">
+                  Total
+                </th>
               </tr>
             </thead>
 
@@ -438,7 +477,7 @@ export default function RosterMatrix({
                   {/* Unit Header Row */}
                   <tr>
                     <td
-                      colSpan={dateRange.length + 1}
+                      colSpan={dateRange.length + 2}
                       className="bg-gray-100 border-b px-4 py-2 text-sm font-medium text-gray-900"
                     >
                       {unitName} ({unitDoctors.length} doctors)
@@ -568,6 +607,11 @@ export default function RosterMatrix({
                           </td>
                         )
                       })}
+                      
+                      {/* Row tally cell */}
+                      <td className="border-b px-2 py-3 text-center text-xs font-medium text-gray-900 bg-gray-50">
+                        {calculateRowTally(doctor)}
+                      </td>
                     </tr>
                   ))}
                 </React.Fragment>
