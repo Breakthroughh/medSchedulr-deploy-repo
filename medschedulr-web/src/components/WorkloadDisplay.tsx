@@ -8,7 +8,7 @@ interface WorkloadSummary {
   doctorId: string
   weekdayOncalls: number
   weekendOncalls: number
-  edShifts: number
+  edCovers: number
   lastStandbyDate: string | null
   daysSinceLastStandby: number
   standbyCount12Months: number
@@ -171,7 +171,7 @@ export default function WorkloadDisplay({ doctorId, doctorName, compact = false,
             <div>
               <div className="text-sm font-medium text-gray-700">Recent Workload (3M)</div>
               <div className="font-semibold text-blue-900">
-                {workloadData.weekdayOncalls + workloadData.weekendOncalls} oncalls, {workloadData.edShifts} ED
+                {workloadData.weekdayOncalls + workloadData.weekendOncalls} oncalls, {workloadData.edCovers} ED Cover
               </div>
             </div>
           </div>
@@ -189,8 +189,8 @@ export default function WorkloadDisplay({ doctorId, doctorName, compact = false,
           <div className="text-xs text-gray-500">Weekend Oncalls (3M)</div>
         </div>
         <div className="text-center p-3 bg-gray-50 rounded">
-          <div className="text-lg font-bold text-gray-900">{workloadData.edShifts}</div>
-          <div className="text-xs text-gray-500">ED Shifts (3M)</div>
+          <div className="text-lg font-bold text-gray-900">{workloadData.edCovers}</div>
+          <div className="text-xs text-gray-500">ED Cover (3M)</div>
         </div>
         <div className="text-center p-3 bg-gray-50 rounded">
           <div className="text-lg font-bold text-gray-900">{workloadData.standbyCount12Months}</div>

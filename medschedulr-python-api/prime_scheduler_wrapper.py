@@ -137,7 +137,7 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                 workload_data[wd['doctor_id']] = {
                     "weekday_oncalls_3m": wd['weekday_oncalls_3m'],
                     "weekend_oncalls_3m": wd['weekend_oncalls_3m'],
-                    "ed_shifts_3m": wd['ed_shifts_3m'],
+                    "ed_covers_3m": wd['ed_covers_3m'],
                     "days_since_last_standby": wd['days_since_last_standby'],
                     "standby_count_12m": wd['standby_count_12m'],
                     "standby_count_3m": wd['standby_count_3m']
@@ -149,7 +149,7 @@ def run_prime_scheduler(config: Dict[str, Any]) -> Dict[str, Any]:
                 workload_data[d] = {
                     "weekday_oncalls_3m": 0,
                     "weekend_oncalls_3m": 0,
-                    "ed_shifts_3m": 0,
+                    "ed_covers_3m": 0,
                     "days_since_last_standby": 9999,
                     "standby_count_12m": 0,
                     "standby_count_3m": 0

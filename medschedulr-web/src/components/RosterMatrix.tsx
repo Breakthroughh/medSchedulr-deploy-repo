@@ -5,7 +5,7 @@ import { format, parseISO, isWeekend, isToday, getDay } from "date-fns"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
-import { Search, Filter, Edit, Save, X, AlertTriangle, CheckCircle, Download } from "lucide-react"
+import { Search, Filter, Edit, Save, X, AlertTriangle, CheckCircle, Download, TrendingUp } from "lucide-react"
 import { checkViolations, type Violation } from "@/lib/violationChecker"
 
 interface Doctor {
@@ -92,6 +92,8 @@ export default function RosterMatrix({
   const [editingCell, setEditingCell] = useState<{ doctorId: string; dateStr: string } | null>(null)
   const [localAssignments, setLocalAssignments] = useState(assignments)
   const [isSaving, setIsSaving] = useState(false)
+  const [workloadData, setWorkloadData] = useState<Record<string, any>>({})
+  const [showWorkload, setShowWorkload] = useState(false)
 
   // Generate date range
   const dateRange = useMemo(() => {
@@ -253,6 +255,80 @@ export default function RosterMatrix({
     document.body.removeChild(link)
   }, [doctorsByUnit, dateRange, calculateRowTally, calculateColumnTally, rosterPeriod.name])
 
+  // Fetch current workload data
+  const fetchWorkloadData = useCallback(async () => {
+    try {
+      // Get workload as of day before this roster period starts
+      const rosterStartDate = new Date(rosterPeriod.startDate)
+      rosterStartDate.setDate(rosterStartDate.getDate() - 1)
+      
+      const response = await fetch(`/api/doctors/workload?referenceDate=${rosterStartDate.toISOString().split('T')[0]}`)
+      if (response.ok) {
+        const data = await response.json()
+        const workloadMap: Record<string, any> = {}
+        
+        // Map workload data by doctor ID
+        data.workloadSummaries?.forEach((w: any) => {
+          workloadMap[w.doctorId] = w
+        })
+        
+        setWorkloadData(workloadMap)
+      }
+    } catch (error) {
+      console.error('Error fetching workload data:', error)
+    }
+  }, [rosterPeriod.startDate])
+
+  // Calculate projected workload after this roster period
+  const calculateProjectedWorkload = useCallback((doctorId: string) => {
+    const currentWorkload = workloadData[doctorId]
+    if (!currentWorkload) return null
+
+    // Count assignments in this roster period for this doctor
+    const doctorCurrentAssignments = localAssignments.filter(a => a.doctor.id === doctorId)
+    let addedWeekdayOncalls = 0
+    let addedWeekendOncalls = 0 
+    let addedEdCovers = 0
+
+    doctorCurrentAssignments.forEach(assignment => {
+      const assignmentDate = new Date(assignment.date)
+      const postName = assignment.postName
+      
+      // Skip clinic assignments
+      if (postName.toLowerCase().includes('clinic')) return
+      
+      // ED Cover is tracked separately
+      if (postName === 'ED Cover') {
+        addedEdCovers++
+        return
+      }
+      
+      // Check if this is an oncall post (Ward, ED1, ED2, Standby, etc. but NOT ED Cover)
+      const oncallPosts = ['Ward', 'ED', 'Standby']
+      const isOncall = oncallPosts.some(post => postName.includes(post))
+      
+      if (isOncall) {
+        if (isWeekend(assignmentDate)) {
+          addedWeekendOncalls++
+        } else {
+          addedWeekdayOncalls++
+        }
+      }
+    })
+
+    return {
+      currentWeekdayOncalls: currentWorkload.weekdayOncalls,
+      currentWeekendOncalls: currentWorkload.weekendOncalls,
+      currentEdCovers: currentWorkload.edCovers || 0,
+      projectedWeekdayOncalls: currentWorkload.weekdayOncalls + addedWeekdayOncalls,
+      projectedWeekendOncalls: currentWorkload.weekendOncalls + addedWeekendOncalls,
+      projectedEdCovers: (currentWorkload.edCovers || 0) + addedEdCovers,
+      addedWeekdayOncalls,
+      addedWeekendOncalls,
+      addedEdCovers
+    }
+  }, [workloadData, localAssignments])
+
   // Get cell content for a doctor on a specific date
   const getCellContent = (doctor: Doctor, date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd')
@@ -385,6 +461,19 @@ export default function RosterMatrix({
                 <AlertTriangle className="w-4 h-4 mr-2" />
                 {showViolations ? 'Hide' : 'Show'} Violations
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!showWorkload) {
+                    fetchWorkloadData()
+                  }
+                  setShowWorkload(!showWorkload)
+                }}
+              >
+                <TrendingUp className="w-4 h-4 mr-2" />
+                {showWorkload ? 'Hide' : 'Show'} Workload
+              </Button>
               {violations.length > 0 && (
                 <span className="text-xs text-gray-500">
                   {violations.length} violation{violations.length !== 1 ? 's' : ''} found
@@ -501,6 +590,16 @@ export default function RosterMatrix({
                 <th className="sticky left-0 z-30 bg-gray-50 border-r border-b px-4 py-3 text-left text-xs font-medium text-gray-900 min-w-[200px]">
                   Doctor / Unit
                 </th>
+                {showWorkload && (
+                  <th className="sticky left-[200px] z-20 bg-gray-50 border-r border-b px-2 py-3 text-center text-xs font-medium text-gray-900 min-w-[120px]">
+                    Before Load (3M)
+                  </th>
+                )}
+                {showWorkload && (
+                  <th className="sticky left-[320px] z-20 bg-gray-50 border-r border-b px-2 py-3 text-center text-xs font-medium text-gray-900 min-w-[120px]">
+                    After Load (3M)
+                  </th>
+                )}
                 {dateRange.map((date, index) => {
                   const isWeekendDay = isWeekend(date)
                   const isTodayDate = isToday(date)
@@ -542,7 +641,7 @@ export default function RosterMatrix({
                   {/* Unit Header Row */}
                   <tr>
                     <td
-                      colSpan={dateRange.length + 2}
+                      colSpan={dateRange.length + 2 + (showWorkload ? 2 : 0)}
                       className="bg-gray-100 border-b px-4 py-2 text-sm font-medium text-gray-900"
                     >
                       {unitName} ({unitDoctors.length} doctors)
@@ -556,6 +655,51 @@ export default function RosterMatrix({
                         <div className="font-medium text-gray-900">{doctor.name}</div>
                         <div className="text-xs text-gray-500">{doctor.category}</div>
                       </td>
+                      
+                      {/* Before Workload Column */}
+                      {showWorkload && (
+                        <td className="sticky left-[200px] z-10 bg-white border-r border-b px-2 py-3 text-xs text-center">
+                          {(() => {
+                            const projectedWorkload = calculateProjectedWorkload(doctor.id)
+                            if (!projectedWorkload) return <div className="text-gray-400">Loading...</div>
+                            
+                            return (
+                              <div>
+                                <div className="text-xs text-gray-600">WD:{projectedWorkload.currentWeekdayOncalls}</div>
+                                <div className="text-xs text-gray-600">WE:{projectedWorkload.currentWeekendOncalls}</div>
+                                <div className="text-xs text-gray-600">ED:{projectedWorkload.currentEdCovers}</div>
+                              </div>
+                            )
+                          })()}
+                        </td>
+                      )}
+                      
+                      {/* After Workload Column */}
+                      {showWorkload && (
+                        <td className="sticky left-[320px] z-10 bg-white border-r border-b px-2 py-3 text-xs text-center">
+                          {(() => {
+                            const projectedWorkload = calculateProjectedWorkload(doctor.id)
+                            if (!projectedWorkload) return <div className="text-gray-400">Loading...</div>
+                            
+                            return (
+                              <div>
+                                <div className={`text-xs ${projectedWorkload.addedWeekdayOncalls > 0 ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                                  WD:{projectedWorkload.projectedWeekdayOncalls}
+                                  {projectedWorkload.addedWeekdayOncalls > 0 && ` (+${projectedWorkload.addedWeekdayOncalls})`}
+                                </div>
+                                <div className={`text-xs ${projectedWorkload.addedWeekendOncalls > 0 ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                                  WE:{projectedWorkload.projectedWeekendOncalls}
+                                  {projectedWorkload.addedWeekendOncalls > 0 && ` (+${projectedWorkload.addedWeekendOncalls})`}
+                                </div>
+                                <div className={`text-xs ${projectedWorkload.addedEdCovers > 0 ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                                  ED:{projectedWorkload.projectedEdCovers}
+                                  {projectedWorkload.addedEdCovers > 0 && ` (+${projectedWorkload.addedEdCovers})`}
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </td>
+                      )}
                       
                       {dateRange.map((date, dateIndex) => {
                         const cellContent = getCellContent(doctor, date)
@@ -687,6 +831,16 @@ export default function RosterMatrix({
                 <td className="sticky left-0 z-10 bg-gray-100 border-r px-4 py-3 text-sm font-medium text-gray-900">
                   Daily Oncall Total
                 </td>
+                {showWorkload && (
+                  <td className="sticky left-[200px] z-10 bg-gray-100 border-r px-2 py-3 text-center text-xs font-medium text-gray-900">
+                    -
+                  </td>
+                )}
+                {showWorkload && (
+                  <td className="sticky left-[320px] z-10 bg-gray-100 border-r px-2 py-3 text-center text-xs font-medium text-gray-900">
+                    -
+                  </td>
+                )}
                 {dateRange.map((date, index) => (
                   <td key={index} className="border-b px-2 py-3 text-center text-xs font-bold text-gray-900">
                     {calculateColumnTally(date)}

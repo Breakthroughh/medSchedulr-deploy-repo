@@ -30,9 +30,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Roster period not found" }, { status: 404 })
     }
 
-    // Refresh workload data before generating schedule (use current date as reference)
+    // Refresh workload data before generating schedule (use day before roster start as reference)
     console.log('🔄 Refreshing doctor workload data...')
-    const workloadSummaries = await refreshDoctorWorkloads()  // Use current date, not roster start
+    const workloadReferenceDate = new Date(rosterPeriod.startDate)
+    workloadReferenceDate.setDate(workloadReferenceDate.getDate() - 1) // Day before roster starts
+    const workloadSummaries = await refreshDoctorWorkloads(workloadReferenceDate)
     const workloadData = await getWorkloadForPythonAPI(workloadSummaries)
     
     // Get all doctors with their units and availability

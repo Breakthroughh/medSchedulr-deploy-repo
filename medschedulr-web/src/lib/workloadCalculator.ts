@@ -3,9 +3,9 @@ import { subDays, subMonths, isWeekend, parseISO } from 'date-fns'
 
 interface WorkloadSummary {
   doctorId: string
-  weekdayOncalls: number
-  weekendOncalls: number
-  edShifts: number
+  weekdayOncalls: number    // Weekday shifts excluding ED Cover
+  weekendOncalls: number    // Weekend shifts excluding ED Cover  
+  edCovers: number          // ED Cover shifts specifically
   lastStandbyDate: Date | null
   daysSinceLastStandby: number
   standbyCount12Months: number
@@ -64,14 +64,12 @@ export async function calculateCumulativeWorkload(options: WorkloadCalculationOp
     const doctorAssignments = assignments.filter(a => a.doctorId === doctor.id)
     
     // Categorize assignments
-    let weekdayOncalls = 0
-    let weekendOncalls = 0
-    let edShifts = 0
+    let weekdayOncalls = 0   // Weekday oncalls excluding ED Cover
+    let weekendOncalls = 0   // Weekend oncalls excluding ED Cover
+    let edCovers = 0         // ED Cover shifts specifically
     let lastStandbyDate: Date | null = null
     let standbyCount12Months = 0
     let standbyCount3Months = 0
-
-    const oncallPosts = ['Ward', 'ED', 'Standby']
 
     doctorAssignments.forEach(assignment => {
       const assignmentDate = new Date(assignment.date)
@@ -80,7 +78,14 @@ export async function calculateCumulativeWorkload(options: WorkloadCalculationOp
       // Skip clinic assignments
       if (postName.toLowerCase().includes('clinic')) return
       
-      // Check if this is an oncall post
+      // ED Cover is tracked separately
+      if (postName === 'ED Cover') {
+        edCovers++
+        return
+      }
+      
+      // Check if this is an oncall post (Ward, ED1, ED2, Standby, etc. but NOT ED Cover)
+      const oncallPosts = ['Ward', 'ED', 'Standby']
       const isOncall = oncallPosts.some(post => postName.includes(post))
       
       if (isOncall) {
@@ -89,11 +94,6 @@ export async function calculateCumulativeWorkload(options: WorkloadCalculationOp
         } else {
           weekdayOncalls++
         }
-      }
-      
-      // Count ED shifts specifically
-      if (postName.toLowerCase().includes('ed')) {
-        edShifts++
       }
       
       // Track Standby Oncall assignments
@@ -122,7 +122,7 @@ export async function calculateCumulativeWorkload(options: WorkloadCalculationOp
       doctorId: doctor.id,
       weekdayOncalls,
       weekendOncalls,
-      edShifts,
+      edCovers,
       lastStandbyDate,
       daysSinceLastStandby,
       standbyCount12Months,
@@ -135,13 +135,13 @@ export async function calculateCumulativeWorkload(options: WorkloadCalculationOp
   // Log summary statistics
   const avgWeekdayOncalls = workloadSummaries.reduce((sum, w) => sum + w.weekdayOncalls, 0) / workloadSummaries.length
   const avgWeekendOncalls = workloadSummaries.reduce((sum, w) => sum + w.weekendOncalls, 0) / workloadSummaries.length
-  const avgEdShifts = workloadSummaries.reduce((sum, w) => sum + w.edShifts, 0) / workloadSummaries.length
+  const avgEdCovers = workloadSummaries.reduce((sum, w) => sum + w.edCovers, 0) / workloadSummaries.length
   const totalStandbyLast12Months = workloadSummaries.reduce((sum, w) => sum + w.standbyCount12Months, 0)
 
   console.log(`📈 Workload Summary (${lookbackMonths} months):`)
   console.log(`  - Avg weekday oncalls: ${avgWeekdayOncalls.toFixed(1)}`)
   console.log(`  - Avg weekend oncalls: ${avgWeekendOncalls.toFixed(1)}`)
-  console.log(`  - Avg ED shifts: ${avgEdShifts.toFixed(1)}`)
+  console.log(`  - Avg ED covers: ${avgEdCovers.toFixed(1)}`)
   console.log(`  - Total Standby (12mo): ${totalStandbyLast12Months}`)
 
   return workloadSummaries
@@ -159,7 +159,7 @@ export async function updateDoctorWorkloadFields(workloadSummaries: WorkloadSumm
       data: {
         workloadWeekday: workload.weekdayOncalls,
         workloadWeekend: workload.weekendOncalls,
-        workloadED: workload.edShifts,
+        workloadED: workload.edCovers,
         lastStandby: workload.lastStandbyDate
       }
     })
@@ -188,7 +188,7 @@ export async function getWorkloadForPythonAPI(workloadSummaries: WorkloadSummary
       doctor_id: doctor.id,
       weekday_oncalls_3m: workload?.weekdayOncalls || 0,
       weekend_oncalls_3m: workload?.weekendOncalls || 0,
-      ed_shifts_3m: workload?.edShifts || 0,
+      ed_covers_3m: workload?.edCovers || 0,
       days_since_last_standby: workload?.daysSinceLastStandby || 9999,
       standby_count_12m: workload?.standbyCount12Months || 0,
       standby_count_3m: workload?.standbyCount3Months || 0
